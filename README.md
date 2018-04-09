@@ -3,13 +3,12 @@
 20180329
 Show in R square(Square of Pearson correlation coefficients)
 
-|                            Valence                            |
-| ------------------------------------------------------------- |
-|     Train     |     Test      |  SVM(paper's) | Compact_CNN   |
-| ------------- | ------------- | ------------- | ------------- |
+| Valence |
+| --- |
+| Train | Test | SVM(paper's) | Compact_CNN |
 |      AMG      |      AMG      |     0.14      |     0.27      |
 |               |      MER      |     0.40      |     0.14      |
-|      AMG      |      CH       |     0.21      |     0.06      |
+|               |      CH       |     0.21      |     0.06      |
 
 
               Arousal			
