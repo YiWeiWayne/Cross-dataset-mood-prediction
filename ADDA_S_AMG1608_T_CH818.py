@@ -152,7 +152,7 @@ paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
 paraFile.writelines(para_line)
 paraFile.close()
 
-for emotion in ['valence', 'arousal']:
+for emotion in ['valence']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -163,7 +163,7 @@ for emotion in ['valence', 'arousal']:
         Target_Train_Y = np.load(save_path + '/' + target_dataset_name + '/Train_Y_arousal.npy')
     Source_Train_X = np.load(save_path + '/' + source_dataset_name + '/Train_X.npy')
     Target_Train_X = np.load(save_path + '/' + target_dataset_name + '/Train_X.npy')
-    for CV in range(0, 10):
+    for CV in range(0, 1):
         if KTF._SESSION:
             print('Reset session.')
             KTF.clear_session()
@@ -264,8 +264,8 @@ for emotion in ['valence', 'arousal']:
         # Train generator and discriminator
         total_training_steps = int(len(Target_Train_Y) / (batch_size * k_g))
         #     init
-        source_data_generator = data_generator(Source_Train_X, Source_Train_Y, batch_size)
-        target_data_generator = data_generator(Target_Train_X, Target_Train_Y, batch_size)
+        source_data_generator = data_generator(Source_Train_X, Source_Train_Y, int(batch_size/2))
+        target_data_generator = data_generator(Target_Train_X, Target_Train_Y, int(batch_size/2))
         model_path = execute_name + '/' + emotion + '/CV' + str(CV) + '/'
         if not os.path.exists(model_path):
             os.makedirs(model_path)
@@ -292,8 +292,6 @@ for emotion in ['valence', 'arousal']:
                 for i in range(k_d):
                     sample_source_x, sample_source_y = next(source_data_generator)
                     sample_target_x, sample_target_y = next(target_data_generator)
-                    # source_y = to_categorical(np.ones(len(sample_source_y)), num_classes=2)
-                    # target_y = to_categorical(np.zeros(len(sample_target_y)), num_classes=2)
                     source_y = np.ones(len(sample_source_y))
                     target_y = np.zeros(len(sample_target_y))
                     source_tensor_output = source_extractor.predict(sample_source_x)
@@ -301,17 +299,18 @@ for emotion in ['valence', 'arousal']:
                     combine_source_target = np.concatenate((source_tensor_output, target_tensor_output), axis=0)
                     combine_y = np.concatenate((source_y, target_y), axis=0)
                     discriminator_model.trainable = True
-                    loss_dis = np.add(discriminator_model.train_on_batch(combine_source_target, combine_y), loss_dis)
+                    loss_dis_source = discriminator_model.train_on_batch(source_tensor_output, source_y)
+                    loss_dis_target = discriminator_model.train_on_batch(target_tensor_output, target_y)
+                    loss_dis = np.add(0.5 * np.add(loss_dis_source, loss_dis_target), loss_dis)
                 for i in range(k_g):
                     sample_target_x, sample_target_y = next(target_data_generator)
-                    # target_y = to_categorical(np.ones(len(sample_target_y)), num_classes=2)
                     target_y = np.ones(len(sample_target_y))
-                    # sample_target_x2, sample_target_y = next(target_data_generator)
-                    # target_y2 = to_categorical(np.ones(len(sample_target_y)), num_classes=2)
-                    # combine_x = np.concatenate((sample_target_x, sample_target_x2), axis=0)
-                    # combine_y = np.concatenate((target_y, target_y2), axis=0)
+                    sample_target_x2, sample_target_y = next(target_data_generator)
+                    target_y2 = np.ones(len(sample_target_y))
+                    combine_x = np.concatenate((sample_target_x, sample_target_x2), axis=0)
+                    combine_y = np.concatenate((target_y, target_y2), axis=0)
                     discriminator_model.trainable = False
-                    loss_fake = np.add(target_discriminator_model.train_on_batch(sample_target_x, target_y), loss_fake)
+                    loss_fake = np.add(target_discriminator_model.train_on_batch(combine_x, combine_y), loss_fake)
             loss_fake = loss_fake / (total_training_steps * k_g)
             loss_dis = loss_dis / (total_training_steps * k_d)
             log_data = log_dump(model_path=model_path, CV=CV, target_classifier_model=target_classifier_model,
