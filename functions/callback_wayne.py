@@ -18,7 +18,7 @@ class LossR2Logger_ModelCheckPoint(Callback):
                  mode='auto', period=1
                  ):
         # Logger
-        self.file_name = file_name + '_' + str(run_num).zfill(2)
+        self.file_name = file_name + '_' + str(run_num)
         self.train_data = train_data
         self.val_data = val_data
         # ModelCheckPoint
@@ -121,15 +121,14 @@ class LossR2Logger_ModelCheckPoint(Callback):
 
         # ModelCheckPoint
         logs = logs or {}
-        filepath = self.filepath + 'R2pr_' + format(val_R2_pearsonr, '.5f') + '_R2_' + format(val_R2, '.5f') \
-                   + '_Loss_' + format(logs.get('val_loss'), '.5f') + \
-                   '.h5'
+        filepath = self.filepath + 'train_R2pr_' + format(train_R2_pearsonr, '.5f') + \
+                   '_val_R2pr_' + format(val_R2_pearsonr, '.5f') + '.h5'
         self.epochs_since_last_save += 1
         if self.epochs_since_last_save >= self.period:
             self.epochs_since_last_save = 0
             filepath = filepath.format(epoch=epoch, **logs)
             if self.save_best_only:
-                current = logs.get(self.monitor)
+                current = self.log_data[self.monitor][-1]
                 if current is None:
                     warnings.warn('Can save best model only with %s available, '
                                   'skipping.' % (self.monitor), RuntimeWarning)
