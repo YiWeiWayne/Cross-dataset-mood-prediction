@@ -1,18 +1,10 @@
 import numpy as np
-import scipy.io as sio
 import keras.backend.tensorflow_backend as KTF
 import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import keras
-from keras.callbacks import ModelCheckpoint
-from functions import model_structure, callback_wayne
-from sklearn.model_selection import KFold
-import time
-from pyexcel_xls import get_data
-import json
-import librosa
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+from functions import model_structure, callback_wayne, Transfer_funcs
 import datetime
 
 
@@ -28,16 +20,15 @@ KTF.set_session(get_session())
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
-dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
-wav_path = save_path + '/Dataset/AMG1838_original/amg1608_wav'
-label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
+source_dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
+source_label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
+target_dataset_path = save_path + '/Dataset/CH818/mp3'
+target_label_path = save_path + '/Dataset/CH818/label/CH818_Annotations.xlsx'
 sec_length = 29
-sample_rate = 22050
-output_sample_rate = 12000
+output_sample_rate = 22050
 patience = []
 batch_size = 16
 epochs = 100
-wav_path = wav_path + '_' + str(output_sample_rate) + 'Hz'
 now = datetime.datetime.now()
 localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.' +\
             str(now.hour).zfill(2) + str(now.minute).zfill(2) + '.' + str(now.second).zfill(2)
@@ -51,13 +42,13 @@ mode = 'max'
 para_line = []
 para_line.append('source_dataset_name:' + source_dataset_name + '\n')
 para_line.append('target_dataset_name:' + target_dataset_name + '\n')
+para_line.append('source_dataset_path:' + source_dataset_path + '\n')
+para_line.append('source_label_path:' + source_label_path + '\n')
+para_line.append('target_dataset_path:' + target_dataset_path + '\n')
+para_line.append('target_label_path:' + target_label_path + '\n')
 para_line.append('save_path:' + save_path + '\n')
 para_line.append('execute_name:' + execute_name + '\n')
-para_line.append('dataset_path:' + dataset_path + '\n')
-para_line.append('label_path:' + label_path + '\n')
-para_line.append('wav_path:' + wav_path + '\n')
 para_line.append('sec_length:' + str(sec_length) + '\n')
-para_line.append('sample_rate:' + str(sample_rate) + '\n')
 para_line.append('output_sample_rate:' + str(output_sample_rate) + '\n')
 para_line.append('patience:' + str(patience) + '\n')
 para_line.append('batch_size:' + str(batch_size) + '\n')
@@ -74,64 +65,34 @@ paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
 paraFile.writelines(para_line)
 paraFile.close()
 
+# transfer mp3 to wav file
+Transfer_funcs.audio_to_wav(dataset_name=source_dataset_name, dataset_path=source_dataset_path,
+                            label_path=source_label_path,
+                            sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
+Transfer_funcs.audio_to_wav(dataset_name=target_dataset_name, dataset_path=target_dataset_path,
+                            label_path=target_label_path,
+                            sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
+
+# # Generate Train X and Train Y
+Transfer_funcs.wav_to_npy(dataset_name=source_dataset_name, label_path=source_label_path,
+                          output_sample_rate=output_sample_rate, save_path=save_path)
+Transfer_funcs.wav_to_npy(dataset_name=target_dataset_name, label_path=target_label_path,
+                          output_sample_rate=output_sample_rate, save_path=save_path)
+
+# # Transfer X from format npy to mat
+Transfer_funcs.npy_to_mat(dataset_name=source_dataset_name,
+                          output_sample_rate=output_sample_rate, save_path=save_path)
+Transfer_funcs.npy_to_mat(dataset_name=target_dataset_name,
+                          output_sample_rate=output_sample_rate, save_path=save_path)
+
 # load data
 Train_Y_valence = np.load(save_path + '/' + source_dataset_name + '/Train_Y_valence.npy')
 Train_Y_arousal = np.load(save_path + '/' + source_dataset_name + '/Train_Y_arousal.npy')
-Train_X = np.load(save_path + '/' + source_dataset_name + '/Train_X.npy')
+Train_X = np.load(save_path + '/' + source_dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
 
 Val_Y_valence = np.load(save_path + '/' + target_dataset_name + '/Train_Y_valence.npy')
 Val_Y_arousal = np.load(save_path + '/' + target_dataset_name + '/Train_Y_arousal.npy')
-Val_X = np.load(save_path + '/' + target_dataset_name + '/Train_X.npy')
-
-# # load xls data
-# data = get_data(label_path)
-# encodedjson = json.dumps(data)
-# decodejson = json.loads(encodedjson)
-# decodejson = decodejson['amg1608_v2']
-
-# # transfer mp3 to wav file
-# if not os.path.exists(wav_path):
-#     os.makedirs(wav_path)
-# if True:
-#     for i in range(1, len(decodejson)):
-#         print(str(i))
-#         if os.path.exists(dataset_path + '/' + str(decodejson[i][2]) + '.mp3'):
-#             print(dataset_path + '/' + str(decodejson[i][2]) + '.mp3')
-#         else:
-#             print('fail')
-#         y, sr = librosa.load(dataset_path + '/' + str(decodejson[i][2]) + '.mp3', sr=output_sample_rate)
-#         print(y.shape)
-#         print(str(sr))
-#         if y.shape[0] >= output_sample_rate*sec_length:
-#             librosa.output.write_wav(path=wav_path + '/' + str(i).zfill(4) + '@' + str(output_sample_rate) +
-#                                      '$' + str(decodejson[i][2]) + '.wav',
-#                                      y=y[0:int(output_sample_rate*sec_length)], sr=output_sample_rate)
-#         else:
-#             print('Shorter: ' + str(y.shape[0]) + '/' + str(sample_rate*sec_length))
-
-# # Generate Train X and Train Y
-# Train_Y_valence = []
-# Train_Y_arousal = []
-# Train_X = []
-# for i in range(1, len(decodejson)):
-#     print(str(i))
-#     Train_Y_valence.append(decodejson[i][7])
-#     Train_Y_arousal.append(decodejson[i][8])
-#     y, sr = librosa.load(wav_path + '/' + str(i).zfill(4) + '@' + str(output_sample_rate) +
-#                          '$' + str(decodejson[i][2]) + '.wav', sr=output_sample_rate)
-#     Train_X.append(y)
-# Train_Y_valence = np.hstack(Train_Y_valence)
-# Train_Y_arousal = np.hstack(Train_Y_arousal)
-# Train_X = np.vstack(Train_X)
-# Train_X = Train_X.reshape((Train_X.shape[0], 1, Train_X.shape[1]))
-# print(Train_Y_valence.shape)
-# print(Train_Y_arousal.shape)
-# print(Train_X.shape)
-# if not os.path.exists(save_path + '/' + source_dataset_name):
-#     os.makedirs(save_path + '/' + source_dataset_name)
-# np.save(save_path + '/' + source_dataset_name + '/Train_X.npy', Train_X)
-# np.save(save_path + '/' + source_dataset_name + '/Train_Y_valence.npy', Train_Y_valence)
-# np.save(save_path + '/' + source_dataset_name + '/Train_Y_arousal.npy', Train_Y_arousal)
+Val_X = np.load(save_path + '/' + target_dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
 
 # Training
 for emotion_axis in ['valence', 'arousal']:
