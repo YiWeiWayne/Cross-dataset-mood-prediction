@@ -23,10 +23,13 @@ KTF.set_session(get_session())
 
 # Parameters
 algorithm = 'ADDA'
+feature = 'melSpec'  # 1.melSpec 2.rCTA
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
-source_execute_name = save_path + '/' + source_dataset_name + '_20180416.1220.14'
+source_execute_name = save_path + '/' + source_dataset_name + '_20180419.1407.48'
+sec_length = 29
+output_sample_rate = 22050
 encoded_size = 32
 batch_size = 16
 epochs = 500
@@ -44,15 +47,23 @@ execute_name = save_path + '/' + algorithm + '_S_' + source_dataset_name + \
                '_T_' + target_dataset_name + '_' + localtime
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
+# real_soft_label_min = 0
+# real_soft_label_max = 0.3
+# fake_soft_label_min = 0.7
+# fake_soft_label_max = 1.2
+action = 'Change sampling rate to 22KHz and change audio-input to feature-input'
 
 # Parameters saved
 para_line = []
 para_line.append('algorithm:' + algorithm + '\n')
+para_line.append('feature:' + feature + '\n')
 para_line.append('save_path:' + save_path + '\n')
 para_line.append('execute_name:' + execute_name + '\n')
 para_line.append('source_dataset_name:' + source_dataset_name + '\n')
 para_line.append('target_dataset_name:' + target_dataset_name + '\n')
 para_line.append('source_execute_name:' + source_execute_name + '\n')
+para_line.append('sec_length:' + str(sec_length) + '\n')
+para_line.append('output_sample_rate:' + str(output_sample_rate) + '\n')
 para_line.append('encoded_size:' + str(encoded_size) + '\n')
 para_line.append('batch_size:' + str(batch_size) + '\n')
 para_line.append('epochs:' + str(epochs) + '\n')
@@ -65,6 +76,11 @@ para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
+# para_line.append('real_soft_label_min:' + str(real_soft_label_min) + '\n')
+# para_line.append('real_soft_label_max:' + str(real_soft_label_max) + '\n')
+# para_line.append('fake_soft_label_min:' + str(fake_soft_label_min) + '\n')
+# para_line.append('fake_soft_label_max:' + str(fake_soft_label_max) + '\n')
+para_line.append('action:' + action + '\n')
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
 paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
@@ -72,7 +88,7 @@ paraFile.writelines(para_line)
 paraFile.close()
 
 # Start to choose emotion for training
-for emotion in ['valence']:
+for emotion in ['valence', 'arousal']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -81,8 +97,10 @@ for emotion in ['valence']:
     elif emotion == 'arousal':
         Source_Train_Y = np.load(save_path + '/' + source_dataset_name + '/Train_Y_arousal.npy')
         Target_Train_Y = np.load(save_path + '/' + target_dataset_name + '/Train_Y_arousal.npy')
-    Source_Train_X = np.load(save_path + '/' + source_dataset_name + '/Train_X.npy')
-    Target_Train_X = np.load(save_path + '/' + target_dataset_name + '/Train_X.npy')
+    Source_Train_X = np.load(save_path + '/' + source_dataset_name +
+                             '/Train_X' + '@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
+    Target_Train_X = np.load(save_path + '/' + target_dataset_name +
+                             '/Train_X' + '@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
     if KTF._SESSION:
         print('Reset session.')
         KTF.clear_session()
@@ -106,25 +124,25 @@ for emotion in ['valence']:
     target_tensor = Input(shape=(encoded_size, ))
     classifier_model = Model(inputs=target_tensor,
                              outputs=model_structure.regression_classifier(target_tensor))
-    # classifier_model.compile(optimizer=adam, loss=classifier_loss, metrics=[metric.R2])
 
     # 3
     # Source & Target feature extraction(layer_length: 33)
     # Input: Raw audio sized Input tensor
     # Output: feature extraction output tensor
-    _, source_extractor, source_audio_input, source_encoded_audio = model_structure.functional_compact_cnn(
-        model_type="source_extractor")
-    _, target_extractor, target_audio_input, target_encoded_audio = model_structure.functional_compact_cnn(
-        model_type="target_extractor")
-    source_extractor.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
-    target_extractor.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
-    discriminator_model.trainable = False
+    source_feature_tensor = Input(shape=(Source_Train_X.shape[1], Source_Train_X.shape[2], 1))
+    source_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=source_feature_tensor)
+    source_extractor = Model(inputs=source_feature_tensor, outputs=source_feature_extractor)
+
+    target_feature_tensor = Input(shape=(Target_Train_X.shape[1], Target_Train_X.shape[2], 1))
+    target_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=target_feature_tensor)
+    target_extractor = Model(inputs=target_feature_tensor, outputs=target_feature_extractor)
 
     # 4
     # Combine Target(layer_length: 33) and discriminator(layer_length: 6)
     # Input: Raw audio sized Input tensor
     # Output: Discriminator output tensor(from target output)
-    target_discriminator_model = Model(inputs=target_audio_input, outputs=discriminator_model(target_encoded_audio))
+    target_discriminator_model = Model(inputs=target_feature_tensor,
+                                       outputs=discriminator_model(target_feature_extractor))
     target_discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
     print("target_discriminator_model summary:")
     target_discriminator_model.summary()
@@ -133,14 +151,13 @@ for emotion in ['valence']:
     # Combine Target(layer_length: 33) and classifier(layer_length: 2)
     # Input: Raw audio sized Input tensor
     # Output: classifier output tensor(from target output)
-    target_classifier_model = Model(inputs=target_audio_input, outputs=classifier_model(target_encoded_audio))
-    target_classifier_model.compile(loss=classifier_loss, optimizer=adam, metrics=[metric.R2])
+    target_classifier_model = Model(inputs=target_feature_tensor,
+                                    outputs=classifier_model(target_feature_extractor))
     print("target_classifier_model summary:")
     target_classifier_model.summary()
 
     # 6
     # Load weights
-    # model = model_structure.compact_cnn()
     if os.path.exists(source_execute_name + '/' + emotion + '/log_0_logs.json'):
         with open(source_execute_name + '/' + emotion + '/log_0_logs.json', "r") as fb:
             data = json.load(fb)
@@ -152,24 +169,21 @@ for emotion in ['valence']:
                         model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
                                                                                   'R2': metric.R2})
                         if load_weights_source_feature_extractor:
+                            print('set source')
                             source_extractor.set_weights(model.get_weights()[:-2])
                         # target_discriminator_model's weights will be set in the same time.
                         if load_weights_target_feature_extractor:
+                            print('set target')
                             target_extractor.set_weights(model.get_weights()[:-2])
                         if load_weights_source_classifier:
+                            print('set classifier')
                             classifier_model.set_weights(model.get_weights()[-2:])
 
     # 7
     # Lock source extractor weights
-    for layer in source_extractor.layers:
-        layer.trainable = False
-    print('Source extractor non-trainable summary:')
-    source_extractor.summary()
+    source_extractor.trainable = False
     # Lock classifier weights
-    for layer in classifier_model.layers:
-        layer.trainable = False
-    print('classifier_model non-trainable summary:')
-    classifier_model.summary()
+    classifier_model.trainable = False
 
     # 8
     # Generator for source and target data
@@ -209,18 +223,22 @@ for emotion in ['valence']:
                 sample_target_x, sample_target_y = next(target_data_generator)
                 source_y = np.ones(len(sample_source_y))
                 target_y = np.zeros(len(sample_target_y))
+                # target_y = np.array([(np.random.randint(4)) / 10] * len(sample_target_y))
                 source_tensor_output = source_extractor.predict(sample_source_x)
                 target_tensor_output = target_extractor.predict(sample_target_x)
                 combine_source_target = np.concatenate((source_tensor_output, target_tensor_output), axis=0)
                 combine_y = np.concatenate((source_y, target_y), axis=0)
                 discriminator_model.trainable = True
+                discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
                 loss_dis = np.add(discriminator_model.train_on_batch(combine_source_target, combine_y), loss_dis)
             # Train taget feature extractor, use combined model: target label=1
             # Trick: inverted target label, to make target similar to source)
             for i in range(k_g):
                 sample_target_x, sample_target_y = next(target_data_generator)
                 target_y = np.ones(len(sample_target_y))
+                # target_y = np.array([(7 + np.random.randint(6)) / 10] * len(sample_target_y))
                 discriminator_model.trainable = False
+                discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
                 loss_fake = np.add(target_discriminator_model.train_on_batch(sample_target_x, target_y), loss_fake)
         loss_fake = loss_fake / (total_training_steps * k_g)
         loss_dis = loss_dis / (total_training_steps * k_d)

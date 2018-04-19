@@ -4,9 +4,11 @@ import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-from functions import model_structure, callback_wayne, Transfer_funcs
+from functions import model_structure, callback_wayne, Transfer_funcs, metric
 import datetime
-
+from keras.models import Model
+from keras.layers import Input
+from keras.optimizers import Adam
 
 
 # GPU speed limit
@@ -17,6 +19,7 @@ def get_session(gpu_fraction=0.6):
 KTF.set_session(get_session())
 
 
+feature = 'melSpec'  # 1.melSpec 2.rCTA
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
@@ -40,6 +43,7 @@ monitor = 'train_R2_pearsonr'
 mode = 'max'
 
 para_line = []
+para_line.append('feature:' + feature + '\n')
 para_line.append('source_dataset_name:' + source_dataset_name + '\n')
 para_line.append('target_dataset_name:' + target_dataset_name + '\n')
 para_line.append('source_dataset_path:' + source_dataset_path + '\n')
@@ -65,34 +69,36 @@ paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
 paraFile.writelines(para_line)
 paraFile.close()
 
-# transfer mp3 to wav file
-Transfer_funcs.audio_to_wav(dataset_name=source_dataset_name, dataset_path=source_dataset_path,
-                            label_path=source_label_path,
-                            sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
-Transfer_funcs.audio_to_wav(dataset_name=target_dataset_name, dataset_path=target_dataset_path,
-                            label_path=target_label_path,
-                            sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
+# # transfer mp3 to wav file
+# Transfer_funcs.audio_to_wav(dataset_name=source_dataset_name, dataset_path=source_dataset_path,
+#                             label_path=source_label_path,
+#                             sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
+# Transfer_funcs.audio_to_wav(dataset_name=target_dataset_name, dataset_path=target_dataset_path,
+#                             label_path=target_label_path,
+#                             sec_length=sec_length, output_sample_rate=output_sample_rate, save_path=save_path)
 
-# # Generate Train X and Train Y
-Transfer_funcs.wav_to_npy(dataset_name=source_dataset_name, label_path=source_label_path,
-                          output_sample_rate=output_sample_rate, save_path=save_path)
-Transfer_funcs.wav_to_npy(dataset_name=target_dataset_name, label_path=target_label_path,
-                          output_sample_rate=output_sample_rate, save_path=save_path)
+# # # Generate Train X and Train Y
+# Transfer_funcs.wav_to_npy(dataset_name=source_dataset_name, label_path=source_label_path,
+#                           output_sample_rate=output_sample_rate, save_path=save_path)
+# Transfer_funcs.wav_to_npy(dataset_name=target_dataset_name, label_path=target_label_path,
+#                           output_sample_rate=output_sample_rate, save_path=save_path)
 
-# # Transfer X from format npy to mat
-Transfer_funcs.npy_to_mat(dataset_name=source_dataset_name,
-                          output_sample_rate=output_sample_rate, save_path=save_path)
-Transfer_funcs.npy_to_mat(dataset_name=target_dataset_name,
-                          output_sample_rate=output_sample_rate, save_path=save_path)
+# # # Transfer X from format npy to mat
+# Transfer_funcs.npy_to_mat(dataset_name=source_dataset_name,
+#                           output_sample_rate=output_sample_rate, save_path=save_path)
+# Transfer_funcs.npy_to_mat(dataset_name=target_dataset_name,
+#                           output_sample_rate=output_sample_rate, save_path=save_path)
 
 # load data
 Train_Y_valence = np.load(save_path + '/' + source_dataset_name + '/Train_Y_valence.npy')
 Train_Y_arousal = np.load(save_path + '/' + source_dataset_name + '/Train_Y_arousal.npy')
-Train_X = np.load(save_path + '/' + source_dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
+Train_X = np.load(save_path + '/' + source_dataset_name +
+                  '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
 
 Val_Y_valence = np.load(save_path + '/' + target_dataset_name + '/Train_Y_valence.npy')
 Val_Y_arousal = np.load(save_path + '/' + target_dataset_name + '/Train_Y_arousal.npy')
-Val_X = np.load(save_path + '/' + target_dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
+Val_X = np.load(save_path + '/' + target_dataset_name +
+                '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
 
 # Training
 for emotion_axis in ['valence', 'arousal']:
@@ -106,7 +112,13 @@ for emotion_axis in ['valence', 'arousal']:
     else:
         Train_Y = Train_Y_arousal
         Val_Y = Val_Y_arousal
-    model = model_structure.compact_cnn(loss=loss)
+    feature_tensor = Input(shape=(Train_X.shape[1], Train_X.shape[2], 1))
+    extractor = model_structure.compact_cnn_extractor(feature_tensor=feature_tensor)
+    regressor = model_structure.regression_classifier(encoded_audio_tensor=extractor)
+    model = Model(inputs=feature_tensor, outputs=regressor)
+    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
+    model.compile(optimizer=adam, loss=loss, metrics=[metric.R2])
+    model.summary()
     model.load_weights(save_path + '/compact_cnn_weights.h5', by_name=True)
     model_path = execute_name + '/' + emotion_axis + '/'
     if not os.path.exists(model_path):
