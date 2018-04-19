@@ -8,46 +8,6 @@ from kapre.time_frequency import Melspectrogram
 from functions import metric
 
 
-# def CRNN_ori(input_shape=128, lr_decay=0.01, dr_rate=0.3, unit_size=128,
-#              cnn_act='relu', kernel_size=32, stride=1, padding='valid',
-#              rnn_act='tanh', rnn_recur_act='hard_sigmoid', go_backwards=True,
-#              nn_act='relu'):
-#     input1 = Input(shape=(input_shape, 1))
-#     input2 = Input(shape=(input_shape, 1))
-#     input3 = Input(shape=(input_shape, 1))
-#     CNN1 = Convolution1D(filters=unit_size, kernel_size=kernel_size, strides=stride, padding=padding)(input1)
-#     CNN2 = Convolution1D(filters=unit_size, kernel_size=kernel_size, strides=stride, padding=padding)(input2)
-#     CNN3 = Convolution1D(filters=unit_size, kernel_size=kernel_size, strides=stride, padding=padding)(input3)
-#     BN1 = BatchNormalization()(CNN1)
-#     BN2 = BatchNormalization()(CNN2)
-#     BN3 = BatchNormalization()(CNN3)
-#     BN1 = Activation(cnn_act)(BN1)
-#     BN2 = Activation(cnn_act)(BN2)
-#     BN3 = Activation(cnn_act)(BN3)
-#     MP1 = MaxPooling1D(pool_size=int((input_shape - kernel_size) / stride + 1))(BN1)
-#     MP2 = MaxPooling1D(pool_size=int((input_shape - kernel_size) / stride + 1))(BN2)
-#     MP3 = MaxPooling1D(pool_size=int((input_shape - kernel_size) / stride + 1))(BN3)
-#     DP1 = Dropout(rate=dr_rate)(MP1)
-#     DP2 = Dropout(rate=dr_rate)(MP2)
-#     DP3 = Dropout(rate=dr_rate)(MP3)
-#     merged_vector = concatenate([DP1, DP2, DP3], axis=1)
-#     lstm1 = LSTM(units=unit_size, activation=rnn_act, recurrent_activation=rnn_recur_act,
-#                  dropout=dr_rate, recurrent_dropout=dr_rate, return_sequences=True,
-#                  go_backwards=go_backwards)(merged_vector)
-#     lstm2 = LSTM(units=unit_size, activation=rnn_act, recurrent_activation=rnn_recur_act,
-#                  dropout=dr_rate, recurrent_dropout=dr_rate, return_sequences=True,
-#                  go_backwards=go_backwards)(lstm1)
-#     dense = TimeDistributed(Dense(units=unit_size))(lstm2)
-#     BN4 = BatchNormalization()(dense)
-#     BN4 = Activation(nn_act)(BN4)
-#     output = TimeDistributed(Dense(units=1, activation='sigmoid'))(BN4)
-#     model = Model(inputs=[input1, input2, input3], outputs=[output])
-#     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=lr_decay)
-#     model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
-#     model.summary()
-#     return model
-
-
 def DCNN(input_shape=660550, dr_rate=0.5, padding='same',
          pool_size=3, pool_stride=3,
          cnn_act='relu',
@@ -246,6 +206,63 @@ def domain_classifier(encoded_audio_tensor):
 
 def regression_classifier(encoded_audio_tensor):
     x = Dense(1, activation="tanh", kernel_initializer='Zeros', bias_initializer='Zeros')(encoded_audio_tensor)
+    return x
+
+
+def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=6000, n_mels=96, decibel=True,
+                    trainable_fb=False, trainable_kernel=False):
+    x = Melspectrogram(n_dft=512, n_hop=256, power_melgram=2.0,
+                       trainable_kernel=trainable_kernel,
+                       trainable_fb=trainable_fb,
+                       return_decibel_melgram=decibel,
+                       sr=sr, n_mels=n_mels,
+                       fmin=fmin, fmax=fmax,
+                       name=tf)(input_tensor)
+    return x
+
+
+def compact_cnn_extractor(feature_tensor):
+    x = Conv2D(filters=32,
+               kernel_size=(3, 3),
+               padding='same',
+               kernel_initializer='Zeros',
+               bias_initializer='Zeros')(feature_tensor)
+    x = BatchNormalization(axis=-1)(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = MaxPooling2D(pool_size=(2, 4))(x)
+    x = Conv2D(filters=32,
+               kernel_size=(3, 3),
+               padding='same',
+               kernel_initializer='Zeros',
+               bias_initializer='Zeros')(x)
+    x = BatchNormalization(axis=-1)(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = MaxPooling2D(pool_size=(3, 4))(x)
+    x = Conv2D(filters=32,
+               kernel_size=(3, 3),
+               padding='same',
+               kernel_initializer='Zeros',
+               bias_initializer='Zeros')(x)
+    x = BatchNormalization(axis=-1)(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = MaxPooling2D(pool_size=(2, 5))(x)
+    x = Conv2D(filters=32,
+               kernel_size=(3, 3),
+               padding='same',
+               kernel_initializer='Zeros',
+               bias_initializer='Zeros')(x)
+    x = BatchNormalization(axis=-1)(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = MaxPooling2D(pool_size=(2, 4))(x)
+    x = Conv2D(filters=32,
+               kernel_size=(3, 3),
+               padding='same',
+               kernel_initializer='Zeros',
+               bias_initializer='Zeros')(x)
+    x = BatchNormalization(axis=-1)(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = MaxPooling2D(pool_size=(4, 4))(x)
+    x = Flatten()(x)
     return x
 
 
