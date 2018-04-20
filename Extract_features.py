@@ -3,11 +3,14 @@ import keras.backend.tensorflow_backend as KTF
 import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, metric, Transfer_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
 from scipy.io import loadmat
+from kapre.time_frequency import Melspectrogram
+from scipy.stats import pearsonr
+import json
 
 # GPU speed limit
 def get_session(gpu_fraction=0.6):
@@ -17,32 +20,33 @@ def get_session(gpu_fraction=0.6):
 KTF.set_session(get_session())
 
 # Parameters
-dataset_name = 'AMG_1608'
-save_path = '/data/Wayne'
-sec_length = 29
-output_sample_rate = 22050
+for dataset_name in ['AMG_1608', 'CH_818']:
+    save_path = '/mnt/data/Wayne'
+    sec_length = 29
+    output_sample_rate = 22050
+    # source_execute_name = save_path + '/AMG_1608_20180418.1807.00'
 
+    # # load Mel spectrum features
+    # print('load Mel spectrum features')
+    # Train_X = np.load(save_path + '/' + dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
+    # Train_Y_valence = np.load(save_path + '/' + dataset_name + '/Train_Y_valence.npy')
+    # Train_Y_arousal = np.load(save_path + '/' + dataset_name + '/Train_Y_arousal.npy')
+    #
+    # input_tensor = Input(shape=(1, output_sample_rate*sec_length))
+    # feature_tensor = model_structure.extract_melspec(input_tensor=input_tensor, sr=output_sample_rate,
+    #                                                  n_dft=1024, n_hop=512)
+    # feature_extractor = Model(inputs=input_tensor, outputs=feature_tensor)
+    # Train_X_feat = feature_extractor.predict(Train_X)
+    # print('Train_X_feat: ' + str(Train_X_feat.shape))
+    # np.save(save_path + '/' + dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz_melSpec_lw.npy', Train_X_feat)
 
-# load Mel spectrum features
-print('load Mel spectrum features')
-Train_X = np.load(save_path + '/' + dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz.npy')
-Train_Y_valence = np.load(save_path + '/' + dataset_name + '/Train_Y_valence.npy')
-Train_Y_arousal = np.load(save_path + '/' + dataset_name + '/Train_Y_arousal.npy')
-
-input_tensor = Input(shape=(1, output_sample_rate*sec_length))
-feature_tensor = model_structure.extract_melspec(input_tensor=input_tensor, sr=output_sample_rate)
-feature_extractor = Model(inputs=input_tensor, outputs=feature_tensor)
-Train_X_feat = feature_extractor.predict(Train_X)
-print('Train_X_feat: ' + str(Train_X_feat.shape))
-np.save(save_path + '/' + dataset_name + '/Train_X@' + str(output_sample_rate) + 'Hz_melSpec.npy', 'Train_X_feat')
-
-# load rhythm features
-print('load rhythm features')
-if os.path.exists(save_path+'/'+dataset_name+'/Train_X@'+str(output_sample_rate)+'Hz_rCTA.mat'):
-    Train_X = loadmat(save_path+'/'+dataset_name+'/Train_X@'+str(output_sample_rate)+'Hz_rCTA.mat')
-Train_X = Train_X['Train_X_feature']
-Train_X_feat = Train_X.reshape((Train_X.shape[0], Train_X.shape[1], Train_X.shape[2], 1))
-print('Train_X_feat: ' + str(Train_X_feat.shape))
+    # load rhythm features
+    print('load rhythm features')
+    if os.path.exists(save_path+'/'+dataset_name+'/Train_X@'+str(output_sample_rate)+'Hz_rCTA.mat'):
+        Train_X = loadmat(save_path+'/'+dataset_name+'/Train_X@'+str(output_sample_rate)+'Hz_rCTA.mat')
+    Train_X = Train_X['Train_X_feature']
+    Train_X_feat = Train_X.reshape((Train_X.shape[0], Train_X.shape[1], Train_X.shape[2], 1))
+    print('Train_X_feat: ' + str(Train_X_feat.shape))
 
 # feature_tensor = Input(shape=(Train_X_feat.shape[1], Train_X_feat.shape[2], 1))
 # extractor = model_structure.compact_cnn_extractor(feature_tensor=feature_tensor)

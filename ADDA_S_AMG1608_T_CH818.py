@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from functions import model_structure, metric, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -15,7 +15,7 @@ from keras.utils import generic_utils
 
 
 # GPU speed limit
-def get_session(gpu_fraction=0.6):
+def get_session(gpu_fraction=0.3):
     # Assume that you have 6GB of GPU memory and want to allocate ~2GB
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
@@ -24,11 +24,21 @@ KTF.set_session(get_session())
 
 # Parameters
 algorithm = 'ADDA'
-feature = 'melSpec'  # 1.melSpec 2.rCTA
+feature = 'melSpec_lw'  # 1.melSpec 2.rCTA 3.melSpec_lw
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
-save_path = '/data/Wayne'
-source_execute_name = save_path + '/' + source_dataset_name + '_20180419.1407.48'
+save_path = '/mnt/data/Wayne'
+source_execute_name = save_path + '/' + source_dataset_name + '_20180420.1305.38'
+para_File = open(source_execute_name + '/Parameters.txt', 'r')
+parameters = para_File.readlines()
+para_File.close()
+for i in range(0, len(parameters)):
+    if 'feature' in parameters[i]:
+        if feature in parameters[i]:
+            print('load correct source model.')
+        else:
+            raise ValueError("Source model feature is not corresponding to ADDA.")
+
 sec_length = 29
 output_sample_rate = 22050
 encoded_size = 32
@@ -52,7 +62,14 @@ discriminator_loss = 'binary_crossentropy'
 # real_soft_label_max = 0.3
 # fake_soft_label_min = 0.7
 # fake_soft_label_max = 1.2
-action = 'Change sampling rate to 22KHz and change audio-input to feature-input'
+action = 'Change sampling rate to 22KHz and enlarge the FFT filter size'
+if feature == 'melSpec':
+    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
+elif feature == 'melSpec_lw':
+    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
+elif feature == 'rCTA':
+    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
+
 
 # Parameters saved
 para_line = []
@@ -77,6 +94,7 @@ para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
+para_line.append('poolings:' + str(poolings) + '\n')
 # para_line.append('real_soft_label_min:' + str(real_soft_label_min) + '\n')
 # para_line.append('real_soft_label_max:' + str(real_soft_label_max) + '\n')
 # para_line.append('fake_soft_label_min:' + str(fake_soft_label_min) + '\n')
@@ -89,7 +107,7 @@ paraFile.writelines(para_line)
 paraFile.close()
 
 # Start to choose emotion for training
-for emotion in ['arousal']:
+for emotion in ['valence']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -131,11 +149,13 @@ for emotion in ['arousal']:
     # Input: Raw audio sized Input tensor
     # Output: feature extraction output tensor
     source_feature_tensor = Input(shape=(Source_Train_X.shape[1], Source_Train_X.shape[2], 1))
-    source_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=source_feature_tensor)
+    source_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=source_feature_tensor,
+                                                                     poolings=poolings)
     source_extractor = Model(inputs=source_feature_tensor, outputs=source_feature_extractor)
 
     target_feature_tensor = Input(shape=(Target_Train_X.shape[1], Target_Train_X.shape[2], 1))
-    target_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=target_feature_tensor)
+    target_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=target_feature_tensor,
+                                                                     poolings=poolings)
     target_extractor = Model(inputs=target_feature_tensor, outputs=target_feature_extractor)
 
     # 4
@@ -165,7 +185,7 @@ for emotion in ['arousal']:
             for root, subdirs, files in os.walk(source_execute_name + '/' + emotion):
                 for f in files:
                     if os.path.splitext(f)[1] == '.h5' and \
-                                            'train_R2pr_' + format(max(data['train_R2_pearsonr']), '.5f') in f:
+                                            'val_R2pr_' + format(max(data['val_R2_pearsonr'][50:]), '.5f') in f:
                         print(f)
                         model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
                                                                                   'R2': metric.R2})
