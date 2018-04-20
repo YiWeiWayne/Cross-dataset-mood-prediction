@@ -200,6 +200,7 @@ def functional_compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax
 def domain_classifier(encoded_audio_tensor):
     x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
     x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     x = Dense(1, activation='sigmoid', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
