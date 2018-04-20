@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, metric, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -11,6 +11,7 @@ from kapre.time_frequency import Melspectrogram
 import os, json
 import numpy as np
 import datetime
+from keras.utils import generic_utils
 
 
 # GPU speed limit
@@ -26,7 +27,7 @@ algorithm = 'ADDA'
 feature = 'melSpec'  # 1.melSpec 2.rCTA
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
-save_path = '/mnt/data/Wayne'
+save_path = '/data/Wayne'
 source_execute_name = save_path + '/' + source_dataset_name + '_20180419.1407.48'
 sec_length = 29
 output_sample_rate = 22050
@@ -88,7 +89,7 @@ paraFile.writelines(para_line)
 paraFile.close()
 
 # Start to choose emotion for training
-for emotion in ['valence', 'arousal']:
+for emotion in ['arousal']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -216,6 +217,7 @@ for emotion in ['valence', 'arousal']:
         # Generator for source and target data
         loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
         loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
+        progbar = generic_utils.Progbar(len(Target_Train_Y))
         for t in range(0, total_training_steps):
             # Train discriminator: taget = 0, source = 1, use discriminator model(To discriminate source and target)
             for i in range(k_d):
@@ -240,6 +242,8 @@ for emotion in ['valence', 'arousal']:
                 discriminator_model.trainable = False
                 discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
                 loss_fake = np.add(target_discriminator_model.train_on_batch(sample_target_x, target_y), loss_fake)
+            progbar.add(batch_size * (k_g + k_d), values=[("loss_dis", loss_dis),
+                                                          ("loss_fake", loss_fake)])
         loss_fake = loss_fake / (total_training_steps * k_g)
         loss_dis = loss_dis / (total_training_steps * k_d)
         log_data = ADDA_funcs.log_dump(model_path=model_path, run_num=0, target_classifier_model=target_classifier_model,
