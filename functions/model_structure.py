@@ -210,8 +210,8 @@ def regression_classifier(encoded_audio_tensor):
 
 
 def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=6000, n_mels=96, decibel=True,
-                    trainable_fb=False, trainable_kernel=False):
-    x = Melspectrogram(n_dft=512, n_hop=256, power_melgram=2.0,
+                    trainable_fb=False, trainable_kernel=False, n_dft=512, n_hop=256):
+    x = Melspectrogram(n_dft=n_dft, n_hop=n_hop, power_melgram=2.0,
                        trainable_kernel=trainable_kernel,
                        trainable_fb=trainable_fb,
                        return_decibel_melgram=decibel,
@@ -221,7 +221,7 @@ def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=60
     return x
 
 
-def compact_cnn_extractor(feature_tensor):
+def compact_cnn_extractor(feature_tensor, poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]):
     x = Conv2D(filters=32,
                kernel_size=(3, 3),
                padding='same',
@@ -229,7 +229,7 @@ def compact_cnn_extractor(feature_tensor):
                bias_initializer='Zeros')(feature_tensor)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=(2, 4))(x)
+    x = MaxPooling2D(pool_size=poolings[0])(x)
     x = Conv2D(filters=32,
                kernel_size=(3, 3),
                padding='same',
@@ -237,7 +237,7 @@ def compact_cnn_extractor(feature_tensor):
                bias_initializer='Zeros')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=(3, 4))(x)
+    x = MaxPooling2D(pool_size=poolings[1])(x)
     x = Conv2D(filters=32,
                kernel_size=(3, 3),
                padding='same',
@@ -245,7 +245,7 @@ def compact_cnn_extractor(feature_tensor):
                bias_initializer='Zeros')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=(2, 5))(x)
+    x = MaxPooling2D(pool_size=poolings[2])(x)
     x = Conv2D(filters=32,
                kernel_size=(3, 3),
                padding='same',
@@ -253,7 +253,7 @@ def compact_cnn_extractor(feature_tensor):
                bias_initializer='Zeros')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=(2, 4))(x)
+    x = MaxPooling2D(pool_size=poolings[3])(x)
     x = Conv2D(filters=32,
                kernel_size=(3, 3),
                padding='same',
@@ -261,7 +261,7 @@ def compact_cnn_extractor(feature_tensor):
                bias_initializer='Zeros')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=(4, 4))(x)
+    x = MaxPooling2D(pool_size=poolings[4])(x)
     x = Flatten()(x)
     return x
 
