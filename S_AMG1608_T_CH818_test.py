@@ -68,10 +68,10 @@ for emotion in emotions:
     if os.path.exists(source_execute_name + '/' + emotion + '/log_0_logs.json'):
         with open(source_execute_name + '/' + emotion + '/log_0_logs.json', "r") as fb:
             data = json.load(fb)
-            R2_pearsonr_max[emotion] = max(data['val_R2_pearsonr'][50:])
+            R2_pearsonr_max[emotion] = max(data['train_R2_pearsonr'])
     for root, subdirs, files in os.walk(source_execute_name + '/' + emotion):
         for f in files:
-            if os.path.splitext(f)[1] == '.h5' and 'val_R2pr_'+format(R2_pearsonr_max[emotion], '.5f') in f:
+            if os.path.splitext(f)[1] == '.h5' and 'train_R2pr_'+format(R2_pearsonr_max[emotion], '.5f') in f:
                 print(f)
                 model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
                                                                           'R2': metric.R2})

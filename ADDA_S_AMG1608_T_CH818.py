@@ -198,7 +198,7 @@ for emotion in ['arousal']:
             for root, subdirs, files in os.walk(source_execute_name + '/' + emotion):
                 for f in files:
                     if os.path.splitext(f)[1] == '.h5' and \
-                                            'val_R2pr_' + format(max(data['val_R2_pearsonr'][50:]), '.5f') in f:
+                                            'train_R2pr_' + format(max(data['train_R2_pearsonr']), '.5f') in f:
                         print(f)
                         model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
                                                                                   'R2': metric.R2})
