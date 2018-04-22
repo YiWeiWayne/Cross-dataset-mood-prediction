@@ -15,7 +15,7 @@ from keras.utils import generic_utils
 
 
 # GPU speed limit
-def get_session(gpu_fraction=0.3):
+def get_session(gpu_fraction=0.6):
     # Assume that you have 6GB of GPU memory and want to allocate ~2GB
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
@@ -24,27 +24,40 @@ KTF.set_session(get_session())
 
 # Parameters
 algorithm = 'ADDA'
-feature = 'melSpec_lw'  # 1.melSpec 2.rCTA 3.melSpec_lw
+action = '22K+lw'
+action_description = 'Change sampling rate to 22KHz and add enlarge FFT window'
+# feature = 'melSpec'  # 1.melSpec 2.rCTA 3.melSpec_lw
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
-save_path = '/mnt/data/Wayne'
-source_execute_name = save_path + '/' + source_dataset_name + '_20180420.1305.38'
+save_path = '/data/Wayne'
+source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180422.1036.41'
 para_File = open(source_execute_name + '/Parameters.txt', 'r')
 parameters = para_File.readlines()
 para_File.close()
 for i in range(0, len(parameters)):
-    if 'feature' in parameters[i]:
-        if feature in parameters[i]:
-            print('load correct source model.')
-        else:
-            raise ValueError("Source model feature is not corresponding to ADDA.")
+    if 'feature:' in parameters[i]:
+        feature = parameters[i][len('feature:'):-1]
+        print(str(feature))
+    elif 'sec_length:' in parameters[i]:
+        sec_length = int(parameters[i][len('sec_length:'):-1])
+        print(str(sec_length))
+    elif 'output_sample_rate:' in parameters[i]:
+        output_sample_rate = int(parameters[i][len('output_sample_rate:'):-1])
+        print(str(output_sample_rate))
+    elif 'batch_size:' in parameters[i]:
+        batch_size = int(parameters[i][len('batch_size:'):-1])
+        print(str(batch_size))
 
-sec_length = 29
-output_sample_rate = 22050
+# for i in range(0, len(parameters)):
+#     if 'feature' in parameters[i]:
+#         if feature in parameters[i]:
+#             print('load correct source model.')
+#         else:
+#             raise ValueError("Source model feature is not corresponding to ADDA.")
+
 encoded_size = 32
-batch_size = 16
 epochs = 500
-k_d = 1
+k_d = 2
 k_g = 1
 load_weights_source_feature_extractor = True
 load_weights_source_classifier = True
@@ -54,7 +67,7 @@ save_weights_only = False
 now = datetime.datetime.now()
 localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.' +\
             str(now.hour).zfill(2) + str(now.minute).zfill(2) + '.' + str(now.second).zfill(2)
-execute_name = save_path + '/' + algorithm + '_S_' + source_dataset_name + \
+execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_dataset_name + \
                '_T_' + target_dataset_name + '_' + localtime
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
@@ -62,7 +75,6 @@ discriminator_loss = 'binary_crossentropy'
 # real_soft_label_max = 0.3
 # fake_soft_label_min = 0.7
 # fake_soft_label_max = 1.2
-action = 'Change sampling rate to 22KHz and enlarge the FFT filter size'
 if feature == 'melSpec':
     poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
 elif feature == 'melSpec_lw':
@@ -74,6 +86,8 @@ elif feature == 'rCTA':
 # Parameters saved
 para_line = []
 para_line.append('algorithm:' + algorithm + '\n')
+para_line.append('action:' + str(action) + '\n')
+para_line.append('action_description:' + str(action_description) + '\n')
 para_line.append('feature:' + feature + '\n')
 para_line.append('save_path:' + save_path + '\n')
 para_line.append('execute_name:' + execute_name + '\n')
@@ -99,7 +113,6 @@ para_line.append('poolings:' + str(poolings) + '\n')
 # para_line.append('real_soft_label_max:' + str(real_soft_label_max) + '\n')
 # para_line.append('fake_soft_label_min:' + str(fake_soft_label_min) + '\n')
 # para_line.append('fake_soft_label_max:' + str(fake_soft_label_max) + '\n')
-para_line.append('action:' + action + '\n')
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
 paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
@@ -107,7 +120,7 @@ paraFile.writelines(para_line)
 paraFile.close()
 
 # Start to choose emotion for training
-for emotion in ['valence']:
+for emotion in ['arousal']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -210,6 +223,7 @@ for emotion in ['valence']:
     # Generator for source and target data
     source_data_generator = ADDA_funcs.data_generator(Source_Train_X, Source_Train_Y, batch_size)
     target_data_generator = ADDA_funcs.data_generator(Target_Train_X, Target_Train_Y, batch_size)
+    del Source_Train_X
 
     # 9
     # training init
@@ -251,7 +265,7 @@ for emotion in ['valence']:
                 combine_source_target = np.concatenate((source_tensor_output, target_tensor_output), axis=0)
                 combine_y = np.concatenate((source_y, target_y), axis=0)
                 discriminator_model.trainable = True
-                discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
+                # discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
                 loss_dis = np.add(discriminator_model.train_on_batch(combine_source_target, combine_y), loss_dis)
             # Train taget feature extractor, use combined model: target label=1
             # Trick: inverted target label, to make target similar to source)
@@ -260,7 +274,7 @@ for emotion in ['valence']:
                 target_y = np.ones(len(sample_target_y))
                 # target_y = np.array([(7 + np.random.randint(6)) / 10] * len(sample_target_y))
                 discriminator_model.trainable = False
-                discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
+                # discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
                 loss_fake = np.add(target_discriminator_model.train_on_batch(sample_target_x, target_y), loss_fake)
             progbar.add(batch_size * (k_g + k_d), values=[("loss_dis", loss_dis),
                                                           ("loss_fake", loss_fake)])
