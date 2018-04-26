@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, metric, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -15,7 +15,7 @@ from keras.utils import generic_utils
 
 
 # GPU speed limit
-def get_session(gpu_fraction=0.6):
+def get_session(gpu_fraction=1):
     # Assume that you have 6GB of GPU memory and want to allocate ~2GB
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
@@ -24,13 +24,13 @@ KTF.set_session(get_session())
 
 # Parameters
 algorithm = 'ADDA'
-action = '22K+lw'
-action_description = 'Change sampling rate to 22KHz and add enlarge FFT window'
+action = 'pitch+lw'
+action_description = 'Change features to pitch+lw'
 # feature = 'melSpec'  # 1.melSpec 2.rCTA 3.melSpec_lw
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
-source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180422.1036.41'
+source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180425.1104.11'
 para_File = open(source_execute_name + '/Parameters.txt', 'r')
 parameters = para_File.readlines()
 para_File.close()
@@ -54,7 +54,7 @@ for i in range(0, len(parameters)):
 #             print('load correct source model.')
 #         else:
 #             raise ValueError("Source model feature is not corresponding to ADDA.")
-
+batch_size = 8
 encoded_size = 32
 epochs = 500
 k_d = 2
@@ -76,11 +76,29 @@ discriminator_loss = 'binary_crossentropy'
 # fake_soft_label_min = 0.7
 # fake_soft_label_max = 1.2
 if feature == 'melSpec':
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
     poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
 elif feature == 'melSpec_lw':
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
     poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
 elif feature == 'rCTA':
-    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
+    poolings = [(1, 1), (2, 2), (2, 5), (2, 7), (3, 2)]
+elif feature == 'rTA':
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
+    poolings = [(4, 1), (2, 2), (5, 5), (7, 7), (2, 2)]
+elif feature == 'pitch':
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
+    poolings = [(5, 8), (4, 4), (2, 5), (3, 5), (3, 3)]
+elif feature == 'pitch+lw':
+    filters = [32, 32, 32, 32, 32]
+    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
+    poolings = [(5, 4), (4, 4), (2, 5), (3, 5), (3, 3)]
 
 
 # Parameters saved
@@ -108,6 +126,8 @@ para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
+para_line.append('filters:' + str(filters) + '\n')
+para_line.append('kernels:' + str(kernels) + '\n')
 para_line.append('poolings:' + str(poolings) + '\n')
 # para_line.append('real_soft_label_min:' + str(real_soft_label_min) + '\n')
 # para_line.append('real_soft_label_max:' + str(real_soft_label_max) + '\n')
@@ -120,7 +140,7 @@ paraFile.writelines(para_line)
 paraFile.close()
 
 # Start to choose emotion for training
-for emotion in ['arousal']:
+for emotion in ['valence', 'arousal']:
     # 0
     # Data load
     if emotion == 'valence':
@@ -163,11 +183,13 @@ for emotion in ['arousal']:
     # Output: feature extraction output tensor
     source_feature_tensor = Input(shape=(Source_Train_X.shape[1], Source_Train_X.shape[2], 1))
     source_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=source_feature_tensor,
+                                                                     filters=filters, kernels=kernels,
                                                                      poolings=poolings)
     source_extractor = Model(inputs=source_feature_tensor, outputs=source_feature_extractor)
 
     target_feature_tensor = Input(shape=(Target_Train_X.shape[1], Target_Train_X.shape[2], 1))
     target_feature_extractor = model_structure.compact_cnn_extractor(feature_tensor=target_feature_tensor,
+                                                                     filters=filters, kernels=kernels,
                                                                      poolings=poolings)
     target_extractor = Model(inputs=target_feature_tensor, outputs=target_feature_extractor)
 
@@ -201,7 +223,7 @@ for emotion in ['arousal']:
                                             'train_R2pr_' + format(max(data['train_R2_pearsonr']), '.5f') in f:
                         print(f)
                         model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
-                                                                                  'R2': metric.R2})
+                                                                                  'R2pr': metric.R2pr})
                         if load_weights_source_feature_extractor:
                             print('set source')
                             source_extractor.set_weights(model.get_weights()[:-2])
@@ -265,8 +287,10 @@ for emotion in ['arousal']:
                 combine_source_target = np.concatenate((source_tensor_output, target_tensor_output), axis=0)
                 combine_y = np.concatenate((source_y, target_y), axis=0)
                 discriminator_model.trainable = True
-                # discriminator_model.compile(loss=discriminator_loss, optimizer=adam, metrics=['accuracy'])
-                loss_dis = np.add(discriminator_model.train_on_batch(combine_source_target, combine_y), loss_dis)
+                loss_s = discriminator_model.train_on_batch(source_tensor_output, source_y)
+                loss_t = discriminator_model.train_on_batch(target_tensor_output, target_y)
+                loss_dis = np.add((np.add(loss_s, loss_t) / 2), loss_dis)
+                # loss_dis = np.add(discriminator_model.train_on_batch(combine_source_target, combine_y), loss_dis)
             # Train taget feature extractor, use combined model: target label=1
             # Trick: inverted target label, to make target similar to source)
             for i in range(k_g):
