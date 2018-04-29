@@ -2,7 +2,8 @@ import keras
 from keras.models import Sequential
 from keras.models import Model
 from keras.layers import Input, Dense, Activation, Convolution1D, MaxPooling1D, Reshape, GlobalAveragePooling1D
-from keras.layers import BatchNormalization, LSTM, Dropout, TimeDistributed, Flatten, Conv2D, MaxPooling2D
+from keras.layers import BatchNormalization, LSTM, Dropout, TimeDistributed, Flatten, Conv2D, Conv1D, MaxPooling2D, \
+    ZeroPadding2D
 from keras.optimizers import Adam
 from kapre.time_frequency import Melspectrogram
 from functions import metric
@@ -200,8 +201,32 @@ def functional_compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax
 def domain_classifier(encoded_audio_tensor):
     x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
     x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = Dense(1, activation='sigmoid', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    # x = Dense(250, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(1, activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def enforced_domain_classifier(encoded_audio_tensor, encoded_size):
+    x = Reshape((encoded_size, 1))(encoded_audio_tensor)
+    # x = BatchNormalization()(x)
+    # x = Conv1D(128, kernel_size=3, strides=2, padding="same")(x)
+    # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    # x = Dropout(0.25)(x)
+    # x = BatchNormalization(axis=1)(x)
+    x = Conv1D(64, kernel_size=3, strides=2, padding="same")(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dropout(0.25)(x)
+    # x = BatchNormalization()(x)
+    x = Conv1D(32, kernel_size=3, strides=2, padding="same")(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dropout(0.25)(x)
+    # x = BatchNormalization()(x)
+    x = Conv1D(16, kernel_size=3, strides=2, padding="same")(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dropout(0.25)(x)
+    # x = BatchNormalization()(x)
+    x = Flatten()(x)
+    x = Dense(1, activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
@@ -222,44 +247,47 @@ def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=60
     return x
 
 
-def compact_cnn_extractor(feature_tensor, poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]):
-    x = Conv2D(filters=32,
-               kernel_size=(3, 3),
+def compact_cnn_extractor(feature_tensor,
+                          filters=[32, 32, 32, 32, 32],
+                          kernels=[(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)],
+                          poolings=[(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]):
+    x = Conv2D(filters=filters[0],
+               kernel_size=kernels[0],
                padding='same',
-               kernel_initializer='Zeros',
-               bias_initializer='Zeros')(feature_tensor)
+               kernel_initializer='glorot_uniform',
+               bias_initializer='glorot_uniform')(feature_tensor)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = MaxPooling2D(pool_size=poolings[0])(x)
-    x = Conv2D(filters=32,
-               kernel_size=(3, 3),
+    x = Conv2D(filters=filters[1],
+               kernel_size=kernels[1],
                padding='same',
-               kernel_initializer='Zeros',
-               bias_initializer='Zeros')(x)
+               kernel_initializer='glorot_uniform',
+               bias_initializer='glorot_uniform')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = MaxPooling2D(pool_size=poolings[1])(x)
-    x = Conv2D(filters=32,
-               kernel_size=(3, 3),
+    x = Conv2D(filters=filters[2],
+               kernel_size=kernels[2],
                padding='same',
-               kernel_initializer='Zeros',
-               bias_initializer='Zeros')(x)
+               kernel_initializer='glorot_uniform',
+               bias_initializer='glorot_uniform')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = MaxPooling2D(pool_size=poolings[2])(x)
-    x = Conv2D(filters=32,
-               kernel_size=(3, 3),
+    x = Conv2D(filters=filters[3],
+               kernel_size=kernels[3],
                padding='same',
-               kernel_initializer='Zeros',
-               bias_initializer='Zeros')(x)
+               kernel_initializer='glorot_uniform',
+               bias_initializer='glorot_uniform')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = MaxPooling2D(pool_size=poolings[3])(x)
-    x = Conv2D(filters=32,
-               kernel_size=(3, 3),
+    x = Conv2D(filters=filters[4],
+               kernel_size=kernels[4],
                padding='same',
-               kernel_initializer='Zeros',
-               bias_initializer='Zeros')(x)
+               kernel_initializer='glorot_uniform',
+               bias_initializer='glorot_uniform')(x)
     x = BatchNormalization(axis=-1)(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = MaxPooling2D(pool_size=poolings[4])(x)
