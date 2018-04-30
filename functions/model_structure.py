@@ -198,35 +198,38 @@ def functional_compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax
     return model, source_extractor, audio_input, encoded_audio
 
 
-def domain_classifier(encoded_audio_tensor):
-    x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
-    x = Dense(500, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+def domain_classifier(encoded_audio_tensor, units):
+    # x = BatchNormalization()(encoded_audio_tensor)
+    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dense(units[1], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     # x = Dense(250, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = Dense(1, activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[2], activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
-def enforced_domain_classifier(encoded_audio_tensor, encoded_size):
+def enforced_domain_classifier(encoded_audio_tensor, encoded_size, units):
     x = Reshape((encoded_size, 1))(encoded_audio_tensor)
     # x = BatchNormalization()(x)
     # x = Conv1D(128, kernel_size=3, strides=2, padding="same")(x)
     # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     # x = Dropout(0.25)(x)
     # x = BatchNormalization(axis=1)(x)
-    x = Conv1D(64, kernel_size=3, strides=2, padding="same")(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dropout(0.25)(x)
+    # x = Conv1D(64, kernel_size=3, strides=2, padding="same")(x)
+    # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    # x = Dropout(0.25)(x)
     # x = BatchNormalization()(x)
-    x = Conv1D(32, kernel_size=3, strides=2, padding="same")(x)
+    x = Conv1D(units[0], kernel_size=3, strides=2, padding="same")(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dropout(0.25)(x)
+    # x = Dropout(0.25)(x)
     # x = BatchNormalization()(x)
-    x = Conv1D(16, kernel_size=3, strides=2, padding="same")(x)
+    x = Conv1D(units[1], kernel_size=3, strides=2, padding="same")(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dropout(0.25)(x)
+    # x = Dropout(0.25)(x)
     # x = BatchNormalization()(x)
     x = Flatten()(x)
-    x = Dense(1, activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[2], activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
