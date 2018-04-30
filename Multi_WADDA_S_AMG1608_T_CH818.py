@@ -5,7 +5,7 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, metric, ADDA_funcs
 from keras.models import Model, load_model
-from keras.layers import Input, concatenate, Reshape
+from keras.layers import Input, concatenate, Reshape, Dense
 from keras.optimizers import SGD, Adam, RMSprop
 from kapre.time_frequency import Melspectrogram
 import os, json
@@ -36,7 +36,7 @@ def make_trainable(model, trainable):
 # Parameters
 algorithm = 'WADDA'
 action = '%ml%rc%pl'
-action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and enforced discriminator'
+action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and use separate discriminator'
 features = ['melSpec_lw', 'rCTA', 'pitch+lw']  # 1.melSpec 2.melSpec_lw 3.rCTA 4.rTA 5.pitch 6.pitch+lw
 emotions = ['valence', 'arousal']
 source_dataset_name = 'AMG_1608'
@@ -77,7 +77,8 @@ execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_data
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
 # Following parameter and optimizer set as recommended in paper
-clip_value = 0.1
+clip_value = 0.01
+discriminator_units = [32, 16, 1]
 # real_soft_label_min = 0
 # real_soft_label_max = 0.3
 # fake_soft_label_min = 0.7
@@ -148,6 +149,7 @@ para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
 para_line.append('clip_value:' + str(clip_value) + '\n')
+para_line.append('discriminator_units:' + str(discriminator_units) + '\n')
 for feature in features:
     para_line.append('feature:' + str(feature) + '\n')
     para_line.append('filters:' + str(filters[feature]) + '\n')
@@ -209,9 +211,23 @@ for emotion in emotions:
     # Discriminator generated(layer_length: 6)
     #  Input: source or target feature extraction output tensor
     # Output: discriminator output tensor
-    source_or_target_tensor = Input(shape=(encoded_size, ))
+    source_or_target_tensor = ['', '', '']
+    discriminator_tensor = ['', '', '']
+    source_or_target_tensor[0] = Input(shape=(int(encoded_size/3), ))
+    discriminator_tensor[0] = model_structure.enforced_domain_classifier(source_or_target_tensor[0],
+                                                                         int(encoded_size / 3), discriminator_units)
+    source_or_target_tensor[1] = Input(shape=(int(encoded_size / 3),))
+    discriminator_tensor[1] = model_structure.enforced_domain_classifier(source_or_target_tensor[1],
+                                                                         int(encoded_size / 3), discriminator_units)
+    source_or_target_tensor[2] = Input(shape=(int(encoded_size / 3),))
+    discriminator_tensor[2] = model_structure.enforced_domain_classifier(source_or_target_tensor[2],
+                                                                         int(encoded_size / 3), discriminator_units)
+    discriminator_tensor_con = concatenate([discriminator_tensor[0], discriminator_tensor[1],
+                                            discriminator_tensor[2]])
+    discriminator_tensor_con = Dense(1, activation='linear', kernel_initializer='glorot_uniform',
+                                     bias_initializer='glorot_uniform')(discriminator_tensor_con)
     discriminator_model = Model(inputs=source_or_target_tensor,
-                                outputs=model_structure.enforced_domain_classifier(source_or_target_tensor, encoded_size))
+                                outputs=discriminator_tensor_con)
     discriminator_model.compile(loss=wasserstein_loss, optimizer=adam, metrics=['accuracy'])
     print("discriminator_model summary:")
     discriminator_model.summary()
@@ -251,8 +267,8 @@ for emotion in emotions:
                                                                        filters=filters[features[2]],
                                                                        kernels=kernels[features[2]],
                                                                        poolings=poolings[features[2]])
-    source_extractor_tensor = concatenate([source_extractor_tensor[0], source_extractor_tensor[1],
-                                           source_extractor_tensor[2]])
+    # source_extractor_tensor_con = concatenate([source_extractor_tensor[0], source_extractor_tensor[1],
+    #                                        source_extractor_tensor[2]])
     source_extractor = Model(inputs=source_feature_tensor, outputs=source_extractor_tensor)
     # Lock source extractor weights
     make_trainable(source_extractor, False)
@@ -278,16 +294,15 @@ for emotion in emotions:
                                                                        filters=filters[features[2]],
                                                                        kernels=kernels[features[2]],
                                                                        poolings=poolings[features[2]])
-    target_extractor_tensor = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
-                                           target_extractor_tensor[2]])
-    target_extractor_tensor = Reshape((encoded_size, ))(target_extractor_tensor)
+    # target_extractor_tensor_con = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
+    #                                        target_extractor_tensor[2]])
     target_extractor = Model(inputs=target_feature_tensor, outputs=target_extractor_tensor)
 
     # 4
     # Combine Target(layer_length: 33) and discriminator(layer_length: 6)
     # Input: Raw audio sized Input tensor
     # Output: Discriminator output tensor(from target output)
-    make_trainable(discriminator_model, False)
+    # make_trainable(discriminator_model, False)
     # discriminator_model.trainable = False
     target_discriminator_model = Model(inputs=target_feature_tensor,
                                        outputs=discriminator_model(target_extractor_tensor))
@@ -299,8 +314,10 @@ for emotion in emotions:
     # Combine Target(layer_length: 33) and classifier(layer_length: 2)
     # Input: Raw audio sized Input tensor
     # Output: classifier output tensor(from target output)
+    target_extractor_tensor_con = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
+                                           target_extractor_tensor[2]])
     target_classifier_model = Model(inputs=target_feature_tensor,
-                                    outputs=classifier_model(target_extractor_tensor))
+                                    outputs=classifier_model(target_extractor_tensor_con))
     print("target_classifier_model summary:")
     target_classifier_model.summary()
 
