@@ -36,13 +36,13 @@ def make_trainable(model, trainable):
 # Parameters
 algorithm = 'WADDA'
 action = '%ml%rc%pl'
-action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and use separate discriminator'
+action_description = 'Change features to melSpec_lw, rCTA, pitch+lw  and enforce classifier'
 features = ['melSpec_lw', 'rCTA', 'pitch+lw']  # 1.melSpec 2.melSpec_lw 3.rCTA 4.rTA 5.pitch 6.pitch+lw
 emotions = ['valence', 'arousal']
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
-source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180427.1613.34'
+source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180502.1001.34'
 source_data_num = 1608
 target_data_num = 818
 para_File = open(source_execute_name + '/Parameters.txt', 'r')
@@ -63,7 +63,7 @@ for i in range(0, len(parameters)):
 encoded_size = 32*3
 epochs = 4000
 k_d = 5
-k_g = 1
+k_g = 2
 load_weights_source_feature_extractor = True
 load_weights_source_classifier = True
 load_weights_target_feature_extractor = True
@@ -78,7 +78,9 @@ classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
 # Following parameter and optimizer set as recommended in paper
 clip_value = 0.01
-discriminator_units = [32, 16, 1]
+discriminator_units = [500, 500, 1]
+classifier_units = [48, 24, 1]
+classifier_layer_num = 3
 # real_soft_label_min = 0
 # real_soft_label_max = 0.3
 # fake_soft_label_min = 0.7
@@ -150,6 +152,7 @@ para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
 para_line.append('clip_value:' + str(clip_value) + '\n')
 para_line.append('discriminator_units:' + str(discriminator_units) + '\n')
+para_line.append('classifier_units:' + str(classifier_units) + '\n')
 for feature in features:
     para_line.append('feature:' + str(feature) + '\n')
     para_line.append('filters:' + str(filters[feature]) + '\n')
@@ -211,23 +214,9 @@ for emotion in emotions:
     # Discriminator generated(layer_length: 6)
     #  Input: source or target feature extraction output tensor
     # Output: discriminator output tensor
-    source_or_target_tensor = ['', '', '']
-    discriminator_tensor = ['', '', '']
-    source_or_target_tensor[0] = Input(shape=(int(encoded_size/3), ))
-    discriminator_tensor[0] = model_structure.enforced_domain_classifier(source_or_target_tensor[0],
-                                                                         int(encoded_size / 3), discriminator_units)
-    source_or_target_tensor[1] = Input(shape=(int(encoded_size / 3),))
-    discriminator_tensor[1] = model_structure.enforced_domain_classifier(source_or_target_tensor[1],
-                                                                         int(encoded_size / 3), discriminator_units)
-    source_or_target_tensor[2] = Input(shape=(int(encoded_size / 3),))
-    discriminator_tensor[2] = model_structure.enforced_domain_classifier(source_or_target_tensor[2],
-                                                                         int(encoded_size / 3), discriminator_units)
-    discriminator_tensor_con = concatenate([discriminator_tensor[0], discriminator_tensor[1],
-                                            discriminator_tensor[2]])
-    discriminator_tensor_con = Dense(1, activation='linear', kernel_initializer='glorot_uniform',
-                                     bias_initializer='glorot_uniform')(discriminator_tensor_con)
+    source_or_target_tensor = Input(shape=(encoded_size,))
     discriminator_model = Model(inputs=source_or_target_tensor,
-                                outputs=discriminator_tensor_con)
+                                outputs=model_structure.domain_classifier(source_or_target_tensor, discriminator_units))
     discriminator_model.compile(loss=wasserstein_loss, optimizer=adam, metrics=['accuracy'])
     print("discriminator_model summary:")
     discriminator_model.summary()
@@ -238,7 +227,7 @@ for emotion in emotions:
     # Output: Regression classifier output tensor
     target_tensor = Input(shape=(encoded_size, ))
     classifier_model = Model(inputs=target_tensor,
-                             outputs=model_structure.regression_classifier(target_tensor))
+                             outputs=model_structure.enforced_regression_classifier(target_tensor, classifier_units))
     # Lock classifier weights
     make_trainable(classifier_model, False)
     # classifier_model.trainable = False
@@ -267,15 +256,16 @@ for emotion in emotions:
                                                                        filters=filters[features[2]],
                                                                        kernels=kernels[features[2]],
                                                                        poolings=poolings[features[2]])
-    # source_extractor_tensor_con = concatenate([source_extractor_tensor[0], source_extractor_tensor[1],
-    #                                        source_extractor_tensor[2]])
-    source_extractor = Model(inputs=source_feature_tensor, outputs=source_extractor_tensor)
+    source_extractor_tensor_con = concatenate([source_extractor_tensor[0], source_extractor_tensor[1],
+                                              source_extractor_tensor[2]])
+    source_extractor_con = Model(inputs=source_feature_tensor, outputs=source_extractor_tensor_con)
     # Lock source extractor weights
-    make_trainable(source_extractor, False)
+    make_trainable(source_extractor_con, False)
     # source_extractor.trainable = False
     # generate target model
     target_feature_tensor = ['', '', '']
     target_extractor_tensor = ['', '', '']
+    target_extractor = ['', '', '']
     target_feature_tensor[0] = Input(shape=(feature_sizes[features[0]][0], feature_sizes[features[0]][1],
                                             feature_sizes[features[0]][2]))
     target_extractor_tensor[0] = model_structure.compact_cnn_extractor(feature_tensor=target_feature_tensor[0],
@@ -294,9 +284,12 @@ for emotion in emotions:
                                                                        filters=filters[features[2]],
                                                                        kernels=kernels[features[2]],
                                                                        poolings=poolings[features[2]])
-    # target_extractor_tensor_con = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
-    #                                        target_extractor_tensor[2]])
-    target_extractor = Model(inputs=target_feature_tensor, outputs=target_extractor_tensor)
+    target_extractor_tensor_con = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
+                                              target_extractor_tensor[2]])
+    target_extractor[0] = Model(inputs=target_feature_tensor[0], outputs=target_extractor_tensor[0])
+    target_extractor[1] = Model(inputs=target_feature_tensor[1], outputs=target_extractor_tensor[1])
+    target_extractor[2] = Model(inputs=target_feature_tensor[2], outputs=target_extractor_tensor[2])
+    target_extractor_con = Model(inputs=target_feature_tensor, outputs=target_extractor_tensor_con)
 
     # 4
     # Combine Target(layer_length: 33) and discriminator(layer_length: 6)
@@ -305,7 +298,7 @@ for emotion in emotions:
     # make_trainable(discriminator_model, False)
     # discriminator_model.trainable = False
     target_discriminator_model = Model(inputs=target_feature_tensor,
-                                       outputs=discriminator_model(target_extractor_tensor))
+                                       outputs=discriminator_model(target_extractor_tensor_con))
     target_discriminator_model.compile(loss=wasserstein_loss, optimizer=adam, metrics=['accuracy'])
     print("target_discriminator_model summary:")
     target_discriminator_model.summary()
@@ -314,8 +307,6 @@ for emotion in emotions:
     # Combine Target(layer_length: 33) and classifier(layer_length: 2)
     # Input: Raw audio sized Input tensor
     # Output: classifier output tensor(from target output)
-    target_extractor_tensor_con = concatenate([target_extractor_tensor[0], target_extractor_tensor[1],
-                                           target_extractor_tensor[2]])
     target_classifier_model = Model(inputs=target_feature_tensor,
                                     outputs=classifier_model(target_extractor_tensor_con))
     print("target_classifier_model summary:")
@@ -334,14 +325,14 @@ for emotion in emotions:
                         model = load_model(os.path.join(root, f))
                         if load_weights_source_feature_extractor:
                             print('set source')
-                            source_extractor.set_weights(model.get_weights()[:-2])
+                            source_extractor_con.set_weights(model.get_weights()[:-(2*classifier_layer_num)])
                         # target_discriminator_model's weights will be set in the same time.
                         if load_weights_target_feature_extractor:
                             print('set target')
-                            target_extractor.set_weights(model.get_weights()[:-2])
+                            target_extractor_con.set_weights(model.get_weights()[:-(2*classifier_layer_num)])
                         if load_weights_source_classifier:
                             print('set classifier')
-                            classifier_model.set_weights(model.get_weights()[-2:])
+                            classifier_model.set_weights(model.get_weights()[-(2*classifier_layer_num):])
 
     # 8
     # Generator for source and target data
@@ -349,11 +340,10 @@ for emotion in emotions:
                                                             features, source_data_num)
     target_data_generator = ADDA_funcs.multi_data_generator(Target_Train_X, Target_Train_Y[emotion], batch_size,
                                                             features, target_data_num)
-    del Source_Train_X
 
     # 9
     # training init
-    total_training_steps = int(target_data_num / (batch_size * (k_g*2 + k_d)))
+    total_training_steps = int(target_data_num / (batch_size * (k_g*3 + k_d)))
     model_path = execute_name + '/' + emotion + '/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
@@ -383,13 +373,14 @@ for emotion in emotions:
         for t in range(0, total_training_steps):
             # Train discriminator: taget = 1, source = -1, use discriminator model(To discriminate source and target)
             for i in range(k_d):
+                # print(str(i)+'/k_d'+str(k_d))
                 sample_source_x0, sample_source_x1, sample_source_x2, sample_source_y = next(source_data_generator)
                 sample_target_x0, sample_target_x1, sample_target_x2, sample_target_y = next(target_data_generator)
                 source_y = -np.ones((len(sample_source_y), 1))
                 target_y = np.ones((len(sample_target_y), 1))
                 # target_y = np.array([(np.random.randint(4)) / 10] * len(sample_target_y))
-                source_tensor_output = source_extractor.predict([sample_source_x0, sample_source_x1, sample_source_x2])
-                target_tensor_output = target_extractor.predict([sample_target_x0, sample_target_x1, sample_target_x2])
+                source_tensor_output = source_extractor_con.predict([sample_source_x0, sample_source_x1, sample_source_x2])
+                target_tensor_output = target_extractor_con.predict([sample_target_x0, sample_target_x1, sample_target_x2])
                 make_trainable(discriminator_model, True)
                 # discriminator_model.trainable = True
                 loss_s = discriminator_model.train_on_batch(source_tensor_output, source_y)
@@ -403,8 +394,11 @@ for emotion in emotions:
             # Train taget feature extractor, use combined model: target label=-1
             # Trick: inverted target label, to make target similar to source)
             for i in range(k_g):
+                # print(str(i) + '/k_g' + str(k_g))
+                sample_target_x00, sample_target_x01, sample_target_x02, sample_target_y0 = next(target_data_generator)
                 sample_target_x10, sample_target_x11, sample_target_x12, sample_target_y1 = next(target_data_generator)
                 sample_target_x20, sample_target_x21, sample_target_x22, sample_target_y2 = next(target_data_generator)
+                target_y0 = -np.ones((len(sample_target_y0), 1))
                 target_y1 = -np.ones((len(sample_target_y1), 1))
                 target_y2 = -np.ones((len(sample_target_y2), 1))
                 # sample_target_x0 = np.concatenate((sample_target_x10, sample_target_x20), axis=0)
@@ -412,14 +406,27 @@ for emotion in emotions:
                 # sample_target_x2 = np.concatenate((sample_target_x12, sample_target_x22), axis=0)
                 # combine_y = np.concatenate((target_y1, target_y2), axis=0)
                 make_trainable(discriminator_model, False)
-                # discriminator_model.trainable = False
+                make_trainable(target_extractor_con, False)
+                # print("Train target_extractor[0]...")
+                make_trainable(target_extractor[0], True)
+                loss_t0 = target_discriminator_model.train_on_batch(
+                    [sample_target_x00, sample_target_x01, sample_target_x02], target_y0)
+                make_trainable(target_extractor_con, False)
+                # print("Train target_extractor[1]...")
+                make_trainable(target_extractor[1], True)
                 loss_t1 = target_discriminator_model.train_on_batch(
                     [sample_target_x10, sample_target_x11, sample_target_x12], target_y1)
+                make_trainable(target_extractor_con, False)
+                # print("Train target_extractor[2]...")
+                make_trainable(target_extractor[2], True)
                 loss_t2 = target_discriminator_model.train_on_batch(
                     [sample_target_x20, sample_target_x21, sample_target_x22], target_y2)
-                loss_fake = np.add((np.add(loss_t1, loss_t2) / 2), loss_fake)
+                # print("Free all...")
+                make_trainable(target_extractor_con, True)
+                make_trainable(discriminator_model, True)
+                loss_fake = np.add((np.add(np.add(loss_t0, loss_t2), loss_t2) / 2), loss_fake)
             # progbar.add(batch_size, values=[("loss_dis", loss_dis), ("loss_fake", loss_fake)])
-        loss_fake = loss_fake / (total_training_steps * k_g*2)
+        loss_fake = loss_fake / (total_training_steps * k_g*3)
         loss_dis = loss_dis / (total_training_steps * k_d)
         log_data = ADDA_funcs.log_dump(model_path=model_path, run_num=0,
                                        target_classifier_model=target_classifier_model,
