@@ -200,7 +200,7 @@ def functional_compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax
 
 def domain_classifier(encoded_audio_tensor, units):
     # x = BatchNormalization()(encoded_audio_tensor)
-    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
     x = Dense(units[1], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
@@ -235,6 +235,15 @@ def enforced_domain_classifier(encoded_audio_tensor, encoded_size, units):
 
 def regression_classifier(encoded_audio_tensor):
     x = Dense(1, activation="tanh", kernel_initializer='Zeros', bias_initializer='Zeros')(encoded_audio_tensor)
+    return x
+
+
+def enforced_regression_classifier(encoded_audio_tensor, units):
+    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dense(units[1], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dense(units[2], activation="tanh", kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
