@@ -3,7 +3,7 @@ import keras.backend.tensorflow_backend as KTF
 import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from functions import model_structure, callback_wayne, Transfer_funcs, metric, ADDA_funcs
 import datetime
 from keras.models import Model, load_model
@@ -21,9 +21,9 @@ def get_session(gpu_fraction=1):
 KTF.set_session(get_session())
 
 action = '%ml%rc%pl'
-action_description = 'Change features to melSpec_lw, rCTA, pitch+lw'
+action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and enforce classifier'
 features = ('melSpec_lw', 'rCTA', 'pitch+lw')  # 1.melSpec 2.melSpec_lw 3.rCTA 4.rTA 5.pitch 6.pitch+lw
-emotions = ['valence', 'arousal']
+emotions = ['valence']
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
@@ -48,6 +48,7 @@ save_weights_only = False
 monitor = 'train_R2_pearsonr'
 mode = 'max'
 load_pretrained_weights = True
+classifier_units = [48, 24, 1]
 filters = dict(zip(features, np.zeros((len(features), 5))))
 kernels = dict(zip(features, np.zeros((len(features), 5, 2))))
 poolings = dict(zip(features, np.zeros((len(features), 5, 2))))
@@ -110,6 +111,7 @@ para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('monitor:' + str(monitor) + '\n')
 para_line.append('mode:' + str(mode) + '\n')
 para_line.append('load_pretrained_weights:' + str(load_pretrained_weights) + '\n')
+para_line.append('classifier_units:' + str(classifier_units) + '\n')
 for feature in features:
     para_line.append('feature:' + str(feature) + '\n')
     para_line.append('filters:' + str(filters[feature]) + '\n')
@@ -187,7 +189,7 @@ for emotion_axis in emotions:
                                                        kernels=kernels[features[2]], poolings=poolings[features[2]])
     model_extract[2] = Model(feature_tensor2, extractor2)
     extractor = concatenate([extractor0, extractor1, extractor2])
-    regressor = model_structure.regression_classifier(encoded_audio_tensor=extractor)
+    regressor = model_structure.enforced_regression_classifier(encoded_audio_tensor=extractor, units=classifier_units)
     model = Model(inputs=[feature_tensor0, feature_tensor1, feature_tensor2], outputs=regressor)
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
     model.compile(optimizer=adam, loss=loss, metrics=['accuracy'])
