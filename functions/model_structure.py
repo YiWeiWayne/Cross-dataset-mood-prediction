@@ -7,6 +7,7 @@ from keras.layers import BatchNormalization, LSTM, Dropout, TimeDistributed, Fla
 from keras.optimizers import Adam
 from kapre.time_frequency import Melspectrogram
 from functions import metric
+import keras.backend.tensorflow_backend as KTF
 
 
 def DCNN(input_shape=660550, dr_rate=0.5, padding='same',
@@ -210,7 +211,7 @@ def domain_classifier(encoded_audio_tensor, units):
 
 
 def enforced_domain_classifier(encoded_audio_tensor, encoded_size, units):
-    x = Reshape((encoded_size, 1))(encoded_audio_tensor)
+    x = Reshape((KTF.int_shape(encoded_audio_tensor)[1], 1))(encoded_audio_tensor)
     # x = BatchNormalization()(x)
     # x = Conv1D(128, kernel_size=3, strides=2, padding="same")(x)
     # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
@@ -242,12 +243,20 @@ def regression_classifier(x, units):
     return x
 
 
-def enforced_regression_classifier(encoded_audio_tensor, units):
-    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dense(units[1], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dense(units[2], activation="tanh", kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+def enforced_regression_classifier(x, units, kernels):
+    if len(units) > 1:
+        x = Reshape((KTF.int_shape(x)[1], 1))(x)
+        for i in range(0, len(units)-1):
+            x = Conv1D(filters=units[i],
+                       kernel_size=kernels[i],
+                       padding='same',
+                       kernel_initializer='glorot_uniform',
+                       bias_initializer='glorot_uniform')(x)
+            x = BatchNormalization(axis=-1)(x)
+            x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+        x = Flatten()(x)
+    x = Dense(units[len(units)-1], activation="tanh",
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
