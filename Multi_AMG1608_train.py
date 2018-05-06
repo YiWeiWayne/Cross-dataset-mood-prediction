@@ -27,12 +27,15 @@ def make_trainable(model, trainable):
         l.trainable = trainable
 
 action = '%ml%rc%pl'
-action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and lock feature-extraction'
+action_description = 'Change features to melSpec_lw, rCTA, pitch+lw and ' \
+                     'lock feature-extraction and ' \
+                     'enforce regressor'
 features = ('melSpec_lw', 'rCTA', 'pitch+lw')  # 1.melSpec 2.melSpec_lw 3.rCTA 4.rTA 5.pitch 6.pitch+lw
 emotions = ['valence']
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
-save_path = '/data/Wayne'
+# save_path = '/data/Wayne'
+save_path = '../../Data'
 source_dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
 source_label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
 target_dataset_path = save_path + '/Dataset/CH818/mp3'
@@ -55,7 +58,11 @@ monitor = 'train_R2_pearsonr'
 mode = 'max'
 load_pretrained_weights = True
 lock_feature_extraction = True
-classifier_units = [96, 96, 1]
+enforced_regressor = True
+regressor_units = [96, 96, 1]
+if enforced_regressor:
+    regressor_units = [32, 32, 1]
+    regressor_kernels = [3, 3]
 filters = dict(zip(features, np.zeros((len(features), 5))))
 kernels = dict(zip(features, np.zeros((len(features), 5, 2))))
 poolings = dict(zip(features, np.zeros((len(features), 5, 2))))
@@ -119,7 +126,10 @@ para_line.append('monitor:' + str(monitor) + '\n')
 para_line.append('mode:' + str(mode) + '\n')
 para_line.append('load_pretrained_weights:' + str(load_pretrained_weights) + '\n')
 para_line.append('lock_feature_extraction:' + str(lock_feature_extraction) + '\n')
-para_line.append('classifier_units:' + str(classifier_units) + '\n')
+para_line.append('enforced_regressor:' + str(enforced_regressor) + '\n')
+para_line.append('regressor_units:' + str(regressor_units) + '\n')
+if enforced_regressor:
+    para_line.append('regressor_kernels:' + str(regressor_kernels) + '\n')
 for feature in features:
     para_line.append('feature:' + str(feature) + '\n')
     para_line.append('filters:' + str(filters[feature]) + '\n')
@@ -197,7 +207,12 @@ for emotion_axis in emotions:
                                                        kernels=kernels[features[2]], poolings=poolings[features[2]])
     model_extract[2] = Model(feature_tensor2, extractor2)
     extractor = concatenate([extractor0, extractor1, extractor2])
-    regressor = model_structure.regression_classifier(encoded_audio_tensor=extractor, units=classifier_units)
+    if enforced_regressor:
+        regressor = model_structure.enforced_regression_classifier(encoded_audio_tensor=extractor,
+                                                                   units=regressor_units,
+                                                                   kernels=regressor_kernels)
+    else:
+        regressor = model_structure.regression_classifier(encoded_audio_tensor=extractor, units=regressor_units)
     model = Model(inputs=[feature_tensor0, feature_tensor1, feature_tensor2], outputs=regressor)
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
     model.compile(optimizer=adam, loss=loss, metrics=['accuracy'])
