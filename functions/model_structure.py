@@ -233,8 +233,12 @@ def enforced_domain_classifier(encoded_audio_tensor, encoded_size, units):
     return x
 
 
-def regression_classifier(encoded_audio_tensor):
-    x = Dense(1, activation="tanh", kernel_initializer='Zeros', bias_initializer='Zeros')(encoded_audio_tensor)
+def regression_classifier(x, units):
+    for i in range(0, len(units)-1):
+        x = Dense(units[i], activation="relu",
+                  kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[len(units)-1], activation="tanh",
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
     return x
 
 
