@@ -272,50 +272,22 @@ def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=60
     return x
 
 
-def compact_cnn_extractor(feature_tensor,
+def compact_cnn_extractor(x,
                           filters=[32, 32, 32, 32, 32],
                           kernels=[(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)],
-                          poolings=[(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]):
-    x = Conv2D(filters=filters[0],
-               kernel_size=kernels[0],
-               padding='same',
-               kernel_initializer='glorot_uniform',
-               bias_initializer='glorot_uniform')(feature_tensor)
-    x = BatchNormalization(axis=-1)(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=poolings[0])(x)
-    x = Conv2D(filters=filters[1],
-               kernel_size=kernels[1],
-               padding='same',
-               kernel_initializer='glorot_uniform',
-               bias_initializer='glorot_uniform')(x)
-    x = BatchNormalization(axis=-1)(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=poolings[1])(x)
-    x = Conv2D(filters=filters[2],
-               kernel_size=kernels[2],
-               padding='same',
-               kernel_initializer='glorot_uniform',
-               bias_initializer='glorot_uniform')(x)
-    x = BatchNormalization(axis=-1)(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=poolings[2])(x)
-    x = Conv2D(filters=filters[3],
-               kernel_size=kernels[3],
-               padding='same',
-               kernel_initializer='glorot_uniform',
-               bias_initializer='glorot_uniform')(x)
-    x = BatchNormalization(axis=-1)(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=poolings[3])(x)
-    x = Conv2D(filters=filters[4],
-               kernel_size=kernels[4],
-               padding='same',
-               kernel_initializer='glorot_uniform',
-               bias_initializer='glorot_uniform')(x)
-    x = BatchNormalization(axis=-1)(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = MaxPooling2D(pool_size=poolings[4])(x)
+                          poolings=[(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)],
+                          paddings=['same', 'same', 'same', 'same', 'same'],
+                          dr_rate=[0, 0, 0, 0.1, 0.2]):
+    for i in range(0, len(filters)):
+        x = Conv2D(filters=filters[i],
+                   kernel_size=kernels[i],
+                   padding=paddings[i],
+                   kernel_initializer='glorot_uniform',
+                   bias_initializer='glorot_uniform')(x)
+        x = BatchNormalization(axis=-1)(x)
+        x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+        x = MaxPooling2D(pool_size=poolings[i])(x)
+        x = Dropout(rate=dr_rate[i])(x)
     x = Flatten()(x)
     return x
 
