@@ -17,10 +17,34 @@ def data_generator(X_train, y_train, batch_size):
             yield X_train[i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
 
 
+def multi_data_generator(X_train, y_train, batch_size, features, data_num):
+    while 1:
+        p = np.random.permutation(data_num)  # shuffle each time
+        for feature in features:
+            X_train[feature] = X_train[feature][p]
+        y_train = y_train[p]
+        for i in range(data_num / batch_size):
+            yield X_train[features[0]][i * batch_size:(i + 1) * batch_size], X_train[features[1]][i * batch_size:(i + 1) * batch_size], X_train[features[2]][i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
+
+
+def data_load_generator(save_path, dataset_name, emotion, output_sample_rate, feature, batch_size):
+    # load data
+    Train_Y = np.load(save_path + '/' + dataset_name + '/Train_Y_' + emotion + '.npy')
+    Train_X = np.load(save_path + '/' + dataset_name +
+                      '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
+    total = len(Train_X)
+    while 1:
+        p = np.random.permutation(len(Train_X))  # shuffle each time
+        X_train = Train_X[p]
+        y_train = Train_Y[p]
+        for i in range(total / batch_size):
+            yield X_train[i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
+
+
 def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_data, loss_fake, loss_dis,
              save_best_only, save_weights_only):
     file_name = model_path + '/log_' + str(run_num)
-    val_y_pred = target_classifier_model.predict(val_x, verbose=0)
+    val_y_pred = target_classifier_model.predict(val_x, batch_size=4, verbose=0)
     val_y_pred = val_y_pred[:, 0]
     val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
     log_data["train_loss_fake"].append(loss_fake[0])
@@ -57,11 +81,11 @@ def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_dat
     plt.close()
 
     # save model
-    if save_best_only:
+    if save_best_only and len(log_data['val_R2_pearsonr']) > 2:
         print('val_R2_pearsonr: ' + str(val_R2_pearsonr))
-        print('val_R2_pearsonr_log_max: ' + str(max(log_data['val_R2_pearsonr'])))
-        if val_R2_pearsonr >= max(log_data['val_R2_pearsonr']):
-            print('yes!')
+        print('val_R2_pearsonr_log_max: ' + str(max(log_data['val_R2_pearsonr'][1:])))
+        if val_R2_pearsonr >= max(log_data['val_R2_pearsonr'][1:]):
+            print('improved!')
             model_save(model=target_classifier_model,
                        save_weights_only=save_weights_only,
                        filepath=model_path +
@@ -69,7 +93,7 @@ def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_dat
                                 '_loss_dis_' + format(loss_dis[0], '.5f') +
                                 '_R2pr_' + format(val_R2_pearsonr, '.5f'))
         else:
-            print('no!')
+            print('No improved!')
     else:
         model_save(model=target_classifier_model,
                    save_weights_only=save_weights_only,

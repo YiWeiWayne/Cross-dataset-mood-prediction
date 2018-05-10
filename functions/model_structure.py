@@ -1,263 +1,9 @@
 import keras
-from keras.models import Sequential
-from keras.models import Model
-from keras.layers import Input, Dense, Activation, Convolution1D, MaxPooling1D, Reshape, GlobalAveragePooling1D
-from keras.layers import BatchNormalization, LSTM, Dropout, TimeDistributed, Flatten, Conv2D, Conv1D, MaxPooling2D, \
-    ZeroPadding2D
-from keras.optimizers import Adam
+from keras.layers import Dense, Reshape, concatenate
+from keras.layers import BatchNormalization, Dropout, Flatten, Conv2D, Conv1D, MaxPooling2D, AveragePooling2D
 from kapre.time_frequency import Melspectrogram
-from functions import metric
 import keras.backend.tensorflow_backend as KTF
-
-
-def DCNN(input_shape=660550, dr_rate=0.5, padding='same',
-         pool_size=3, pool_stride=3,
-         cnn_act='relu',
-         cnn_filter1=128, cnn_kernel1=3, cnn_stride1=3, cnn_stride1_p=1,
-         cnn_filter2=256, cnn_kernel2=3, cnn_stride2=1,
-         cnn_filter3=512, cnn_kernel3=3, cnn_kernel3_p=1, cnn_stride3=1,
-         nn_units=1, nn_act='tanh'):
-    input1 = Input(shape=(input_shape, 1))
-    CNN1 = Convolution1D(filters=cnn_filter1, kernel_size=cnn_kernel1, strides=cnn_stride1, padding=padding)(input1)
-    CNN1 = BatchNormalization()(CNN1)
-    CNN1 = Activation(cnn_act)(CNN1)
-    CNN2 = Convolution1D(filters=cnn_filter1, kernel_size=cnn_kernel1, strides=cnn_stride1_p, padding=padding)(CNN1)
-    CNN2 = BatchNormalization()(CNN2)
-    CNN2 = Activation(cnn_act)(CNN2)
-    CNN2 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN2)
-    CNN3 = Convolution1D(filters=cnn_filter1, kernel_size=cnn_kernel1, strides=cnn_stride1_p, padding=padding)(CNN2)
-    CNN3 = BatchNormalization()(CNN3)
-    CNN3 = Activation(cnn_act)(CNN3)
-    CNN3 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN3)
-    CNN4 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN3)
-    CNN4 = BatchNormalization()(CNN4)
-    CNN4 = Activation(cnn_act)(CNN4)
-    CNN4 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN4)
-    CNN5 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN4)
-    CNN5 = BatchNormalization()(CNN5)
-    CNN5 = Activation(cnn_act)(CNN5)
-    CNN5 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN5)
-    CNN6 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN5)
-    CNN6 = BatchNormalization()(CNN6)
-    CNN6 = Activation(cnn_act)(CNN6)
-    CNN6 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN6)
-    CNN7 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN6)
-    CNN7 = BatchNormalization()(CNN7)
-    CNN7 = Activation(cnn_act)(CNN7)
-    CNN7 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN7)
-    CNN8 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN7)
-    CNN8 = BatchNormalization()(CNN8)
-    CNN8 = Activation(cnn_act)(CNN8)
-    CNN8 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN8)
-    CNN9 = Convolution1D(filters=cnn_filter2, kernel_size=cnn_kernel2, strides=cnn_stride2, padding=padding)(CNN8)
-    CNN9 = BatchNormalization()(CNN9)
-    CNN9 = Activation(cnn_act)(CNN9)
-    CNN9 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN9)
-    CNN10 = Convolution1D(filters=cnn_filter3, kernel_size=cnn_kernel3, strides=cnn_stride3, padding=padding)(CNN9)
-    CNN10 = BatchNormalization()(CNN10)
-    CNN10 = Activation(cnn_act)(CNN10)
-    CNN10 = MaxPooling1D(pool_size=pool_size, strides=pool_stride, padding=padding)(CNN10)
-    CNN11 = Convolution1D(filters=cnn_filter3, kernel_size=cnn_kernel3_p, strides=cnn_stride3, padding=padding)(CNN10)
-    CNN11 = BatchNormalization()(CNN11)
-    CNN11 = Activation(cnn_act)(CNN11)
-    DP1 = Dropout(rate=dr_rate)(CNN11)
-    DP1 = Flatten()(DP1)
-    output1 = Dense(units=nn_units, activation=nn_act)(DP1)
-    model = Model(inputs=[input1], outputs=[output1])
-    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    model.compile(optimizer=adam, loss='mean_squared_error', metrics=[metric.R2])
-    model.summary()
-    return model
-
-
-def compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax=6000, n_mels=96, decibel=True,
-                trainable_fb=False, trainable_kernel=False, loss='mean_squared_error'):
-    input_length = sr*sec_length
-    model = Sequential()
-    model.add(Melspectrogram(n_dft=512, n_hop=256, power_melgram=2.0,
-                             input_shape=(1, input_length),
-                             trainable_kernel=trainable_kernel,
-                             trainable_fb=trainable_fb,
-                             return_decibel_melgram=decibel,
-                             sr=sr, n_mels=n_mels,
-                             fmin=fmin, fmax=fmax,
-                             name=tf))
-    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
-    model.add(Conv2D(filters=32,
-                     kernel_size=(3, 3),
-                     padding='same',
-                     kernel_initializer='Zeros',
-                     bias_initializer='Zeros'))
-    model.add(BatchNormalization(axis=-1))
-    model.add(keras.layers.advanced_activations.ELU(alpha=1.0))
-    model.add(MaxPooling2D(pool_size=(2, 4)))
-    model.add(Conv2D(filters=32,
-                     kernel_size=(3, 3),
-                     padding='same',
-                     kernel_initializer='Zeros',
-                     bias_initializer='Zeros'))
-    model.add(BatchNormalization(axis=-1))
-    model.add(keras.layers.advanced_activations.ELU(alpha=1.0))
-    model.add(MaxPooling2D(pool_size=(3, 4)))
-    model.add(Conv2D(filters=32,
-                     kernel_size=(3, 3),
-                     padding='same',
-                     kernel_initializer='Zeros',
-                     bias_initializer='Zeros'))
-    model.add(BatchNormalization(axis=-1))
-    model.add(keras.layers.advanced_activations.ELU(alpha=1.0))
-    model.add(MaxPooling2D(pool_size=(2, 5)))
-    model.add(Conv2D(filters=32,
-                     kernel_size=(3, 3),
-                     padding='same',
-                     kernel_initializer='Zeros',
-                     bias_initializer='Zeros'))
-    model.add(BatchNormalization(axis=-1))
-    model.add(keras.layers.advanced_activations.ELU(alpha=1.0))
-    model.add(MaxPooling2D(pool_size=(2, 4)))
-    model.add(Conv2D(filters=32,
-                     kernel_size=(3, 3),
-                     padding='same',
-                     kernel_initializer='Zeros',
-                     bias_initializer='Zeros'))
-    model.add(BatchNormalization(axis=-1))
-    model.add(keras.layers.advanced_activations.ELU(alpha=1.0))
-    model.add(MaxPooling2D(pool_size=(4, 4)))
-    model.add(Flatten())
-    model.add(Dense(1, activation='tanh', kernel_initializer='Zeros', bias_initializer='Zeros'))
-    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    model.compile(optimizer=adam, loss=loss, metrics=[metric.R2])
-    model.summary()
-    return model
-
-
-def functional_compact_cnn(sr=12000, sec_length=29, tf='melgram', fmin=0.0, fmax=6000, n_mels=96, decibel=True,
-                           trainable_fb=False, trainable_kernel=False, loss='mean_squared_error',
-                           model_type="source_extractor"):
-    input_length = sr*sec_length
-    # source_extractor_tensor = Sequential()
-    audio_input = Input(shape=(1, input_length))
-    source_extractor_tensor = Melspectrogram(n_dft=512, n_hop=256, power_melgram=2.0,
-                                             input_shape=(1, input_length),
-                                             trainable_kernel=trainable_kernel,
-                                             trainable_fb=trainable_fb,
-                                             return_decibel_melgram=decibel,
-                                             sr=sr, n_mels=n_mels,
-                                             fmin=fmin, fmax=fmax,
-                                             name=tf)(audio_input)
-    source_extractor_tensor = Conv2D(filters=32,
-                                     kernel_size=(3, 3),
-                                     padding='same',
-                                     kernel_initializer='Zeros',
-                                     bias_initializer='Zeros')(source_extractor_tensor)
-    source_extractor_tensor = BatchNormalization(axis=-1)(source_extractor_tensor)
-    source_extractor_tensor = keras.layers.advanced_activations.ELU(alpha=1.0)(source_extractor_tensor)
-    source_extractor_tensor = MaxPooling2D(pool_size=(2, 4))(source_extractor_tensor)
-    source_extractor_tensor = Conv2D(filters=32,
-                                     kernel_size=(3, 3),
-                                     padding='same',
-                                     kernel_initializer='Zeros',
-                                     bias_initializer='Zeros')(source_extractor_tensor)
-    source_extractor_tensor = BatchNormalization(axis=-1)(source_extractor_tensor)
-    source_extractor_tensor = keras.layers.advanced_activations.ELU(alpha=1.0)(source_extractor_tensor)
-    source_extractor_tensor = MaxPooling2D(pool_size=(3, 4))(source_extractor_tensor)
-    source_extractor_tensor = Conv2D(filters=32,
-                                     kernel_size=(3, 3),
-                                     padding='same',
-                                     kernel_initializer='Zeros',
-                                     bias_initializer='Zeros')(source_extractor_tensor)
-    source_extractor_tensor = BatchNormalization(axis=-1)(source_extractor_tensor)
-    source_extractor_tensor = keras.layers.advanced_activations.ELU(alpha=1.0)(source_extractor_tensor)
-    source_extractor_tensor = MaxPooling2D(pool_size=(2, 5))(source_extractor_tensor)
-    source_extractor_tensor = Conv2D(filters=32,
-                                     kernel_size=(3, 3),
-                                     padding='same',
-                                     kernel_initializer='Zeros',
-                                     bias_initializer='Zeros')(source_extractor_tensor)
-    source_extractor_tensor = BatchNormalization(axis=-1)(source_extractor_tensor)
-    source_extractor_tensor = keras.layers.advanced_activations.ELU(alpha=1.0)(source_extractor_tensor)
-    source_extractor_tensor = MaxPooling2D(pool_size=(2, 4))(source_extractor_tensor)
-    source_extractor_tensor = Conv2D(filters=32,
-                                     kernel_size=(3, 3),
-                                     padding='same',
-                                     kernel_initializer='Zeros',
-                                     bias_initializer='Zeros')(source_extractor_tensor)
-    source_extractor_tensor = BatchNormalization(axis=-1)(source_extractor_tensor)
-    source_extractor_tensor = keras.layers.advanced_activations.ELU(alpha=1.0)(source_extractor_tensor)
-    source_extractor_tensor = MaxPooling2D(pool_size=(4, 4))(source_extractor_tensor)
-    encoded_audio = Flatten()(source_extractor_tensor)
-
-    # extract feature extraction input and output
-    source_extractor = Model(inputs=audio_input, outputs=encoded_audio, name=model_type)
-    # source_extractor.summary()
-
-    output = Dense(1, activation="tanh", kernel_initializer='Zeros', bias_initializer='Zeros')(encoded_audio)
-    model = Model(inputs=audio_input, outputs=output)
-    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    model.compile(optimizer=adam, loss=loss, metrics=[metric.R2])
-    # model.summary()
-    return model, source_extractor, audio_input, encoded_audio
-
-
-def domain_classifier(encoded_audio_tensor, units):
-    # x = BatchNormalization()(encoded_audio_tensor)
-    x = Dense(units[0], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(encoded_audio_tensor)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    x = Dense(units[1], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    # x = Dense(250, activation='relu', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = Dense(units[2], activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    return x
-
-
-def enforced_domain_classifier(encoded_audio_tensor, encoded_size, units):
-    x = Reshape((KTF.int_shape(encoded_audio_tensor)[1], 1))(encoded_audio_tensor)
-    # x = BatchNormalization()(x)
-    # x = Conv1D(128, kernel_size=3, strides=2, padding="same")(x)
-    # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    # x = Dropout(0.25)(x)
-    # x = BatchNormalization(axis=1)(x)
-    # x = Conv1D(64, kernel_size=3, strides=2, padding="same")(x)
-    # x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    # x = Dropout(0.25)(x)
-    # x = BatchNormalization()(x)
-    x = Conv1D(units[0], kernel_size=3, strides=2, padding="same")(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    # x = Dropout(0.25)(x)
-    # x = BatchNormalization()(x)
-    x = Conv1D(units[1], kernel_size=3, strides=2, padding="same")(x)
-    x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-    # x = Dropout(0.25)(x)
-    # x = BatchNormalization()(x)
-    x = Flatten()(x)
-    x = Dense(units[2], activation='linear', kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    return x
-
-
-def regression_classifier(x, units):
-    for i in range(0, len(units)-1):
-        x = Dense(units[i], activation="relu",
-                  kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    x = Dense(units[len(units)-1], activation="tanh",
-              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    return x
-
-
-def enforced_regression_classifier(x, units, kernels):
-    if len(units) > 1:
-        x = Reshape((KTF.int_shape(x)[1], 1))(x)
-        for i in range(0, len(units)-1):
-            x = Conv1D(filters=units[i],
-                       kernel_size=kernels[i],
-                       padding='same',
-                       kernel_initializer='glorot_uniform',
-                       bias_initializer='glorot_uniform')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-        x = Flatten()(x)
-    x = Dense(units[len(units)-1], activation="tanh",
-              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
-    return x
+from functions.Custom_layers import Std2DLayer
 
 
 def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=6000, n_mels=96, decibel=True,
@@ -272,23 +18,76 @@ def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=60
     return x
 
 
-def compact_cnn_extractor(x,
-                          filters=[32, 32, 32, 32, 32],
-                          kernels=[(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)],
-                          poolings=[(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)],
-                          paddings=['same', 'same', 'same', 'same', 'same'],
-                          dr_rate=[0, 0, 0, 0.1, 0.2]):
+def domain_classifier(x, units, output_activation):
+    for i in range(0, len(units)-1):
+        x = Dense(units[i], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+        x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+    x = Dense(units[len(units)-1], activation=output_activation,
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def enforced_domain_classifier(x, units, kernels, strides, paddings, output_activation):
+    if len(units) > 1:
+        x = Reshape((KTF.int_shape(x)[1], 1))(x)
+        for i in range(0, len(units)-1):
+            x = Conv1D(units[i], kernel_size=kernels[i], strides=strides[i], padding=paddings[i])(x)
+            x = BatchNormalization(axis=-1)(x)
+            x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+        x = Flatten()(x)
+    x = Dense(units[len(units)-1], activation=output_activation,
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def regression_classifier(x, units):
+    for i in range(0, len(units)-1):
+        x = Dense(units[i], activation="relu",
+                  kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[len(units)-1], activation="tanh",
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def enforced_regression_classifier(x, units, kernels, strides, paddings):
+    if len(units) > 1:
+        x = Reshape((KTF.int_shape(x)[1], 1))(x)
+        for i in range(0, len(units)-1):
+            x = Conv1D(filters=units[i],
+                       kernel_size=kernels[i],
+                       strides=strides[i],
+                       padding=paddings[i],
+                       kernel_initializer='glorot_uniform',
+                       bias_initializer='glorot_uniform')(x)
+            x = BatchNormalization(axis=-1)(x)
+            x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+        x = Flatten()(x)
+    x = Dense(units[len(units)-1], activation="tanh",
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def compact_cnn_extractor(x, filters, kernels, strides, paddings, poolings, dr_rate):
     for i in range(0, len(filters)):
         x = Conv2D(filters=filters[i],
                    kernel_size=kernels[i],
+                   strides=strides[i],
                    padding=paddings[i],
                    kernel_initializer='glorot_uniform',
                    bias_initializer='glorot_uniform')(x)
         x = BatchNormalization(axis=-1)(x)
         x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-        x = MaxPooling2D(pool_size=poolings[i])(x)
-        x = Dropout(rate=dr_rate[i])(x)
+        if poolings[i] != (1, 1):
+            x = MaxPooling2D(pool_size=poolings[i])(x)
+        if dr_rate[i] != 0:
+            x = Dropout(rate=dr_rate[i])(x)
+    mp = MaxPooling2D(pool_size=poolings[len(poolings)-1])(x)
+    ap = AveragePooling2D(pool_size=poolings[len(poolings)-1])(x)
+    sp = Std2DLayer(axis=2)(x)
+    x = concatenate([mp, ap, sp])
     x = Flatten()(x)
+    if dr_rate[len(dr_rate)-1] != 0:
+        x = Dropout(rate=dr_rate[len(dr_rate)-1])(x)
     return x
 
 
