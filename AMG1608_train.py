@@ -3,7 +3,7 @@ import keras.backend.tensorflow_backend as KTF
 import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, callback_wayne, Transfer_funcs, metric
 import datetime
 from keras.models import Model
@@ -12,19 +12,19 @@ from keras.optimizers import Adam
 
 
 # GPU speed limit
-def get_session(gpu_fraction=1):
+def get_session(gpu_fraction=0.3):
     # Assume that you have 6GB of GPU memory and want to allocate ~2GB
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
 KTF.set_session(get_session())
 
-action = 'pitch+lw'
-action_description = 'Change features to pitch+lw '
-feature = 'pitch+lw'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.rTA
+action = 'melSpec'
+action_description = 'Change features to melSpec and for larger frequency filter size'
+feature = 'melSpec'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.rTA
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
-emotions = ['valence']
+emotions = ['arousal']
 source_dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
 source_label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
 target_dataset_path = save_path + '/Dataset/CH818/mp3'
@@ -32,7 +32,7 @@ target_label_path = save_path + '/Dataset/CH818/label/CH818_Annotations.xlsx'
 sec_length = 29
 output_sample_rate = 22050
 patience = []
-batch_size = 8
+batch_size = 16
 epochs = 300
 now = datetime.datetime.now()
 localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.' +\
@@ -44,40 +44,43 @@ save_best_only = False
 save_weights_only = False
 monitor = 'train_R2_pearsonr'
 mode = 'max'
-load_pretrained_weights = True
-regressor_units = [1]
-if feature == 'melSpec':
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
+load_pretrained_weights = False
+regressor_units = [128, 64, 1]
+if feature == 'melSpec':  # dim(96, 2498, 1)
+    filters = [128, 128, 128]
+    kernels = [(96, 10), (1, 6), (1, 4)]
+    strides = [(1, 8), (1, 6), (1, 4)]
+    paddings = ['valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
+    dr_rate = [0, 0, 0, 0]
 elif feature == 'melSpec_lw':  # dim(96, 1249, 1)
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
+    filters = [128, 128, 128]
+    kernels = [(96, 5), (1, 6), (1, 4)]
+    strides = [(1, 4), (1, 6), (1, 4)]
+    paddings = ['valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
+    dr_rate = [0, 0, 0, 0.1]
 elif feature == 'rCTA':  # dim(30, 142, 1)
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(1, 1), (2, 2), (2, 5), (2, 7), (3, 2)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
-    dr_rate = [0, 0, 0, 0.3, 0.3]
-elif feature == 'rTA':
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(4, 1), (2, 2), (5, 5), (7, 7), (2, 2)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
+    filters = [128, 128, 128]
+    kernels = [(30, 4), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 2)]
+    paddings = ['valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0.1]
 elif feature == 'pitch':
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(5, 8), (4, 4), (2, 5), (3, 5), (3, 3)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
+    filters = [128, 128, 128, 128]
+    kernels = [(360, 6), (1, 4), (1, 4), (1, 3)]
+    strides = [(1, 4), (1, 4), (1, 4), (1, 3)]
+    paddings = ['valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 13)]
+    dr_rate = [0, 0, 0, 0, 0]
 elif feature == 'pitch+lw':  # dim(360, 1249, 1)
-    filters = [32, 32, 32, 32, 32]
-    kernels = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-    poolings = [(2, 4), (4, 4), (4, 5), (2, 4), (5, 3)]
-    paddings = ['same', 'same', 'same', 'same', 'same']
-    dr_rate = [0, 0, 0, 0.3, 0.3]
+    filters = [128, 128, 128]
+    kernels = [(360, 5), (1, 6), (1, 4)]
+    strides = [(1, 4), (1, 6), (1, 4)]
+    paddings = ['valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
+    dr_rate = [0, 0, 0, 0.1]
 
 para_line = []
 para_line.append('action:' + str(action) + '\n')
@@ -102,10 +105,12 @@ para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('monitor:' + str(monitor) + '\n')
 para_line.append('mode:' + str(mode) + '\n')
 para_line.append('load_pretrained_weights:' + str(load_pretrained_weights) + '\n')
+para_line.append('regressor_units:' + str(regressor_units) + '\n')
 para_line.append('filters:' + str(filters) + '\n')
 para_line.append('kernels:' + str(kernels) + '\n')
-para_line.append('poolings:' + str(poolings) + '\n')
 para_line.append('paddings:' + str(paddings) + '\n')
+para_line.append('strides:' + str(strides) + '\n')
+para_line.append('poolings:' + str(poolings) + '\n')
 para_line.append('dr_rate:' + str(dr_rate) + '\n')
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
@@ -144,7 +149,7 @@ Val_Y_arousal = np.load(save_path + '/' + target_dataset_name + '/Train_Y_arousa
 Val_X = np.load(save_path + '/' + target_dataset_name +
                 '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
 print('Train_X: ' + str(Train_X.shape))
-
+#
 # Training
 for emotion_axis in emotions:
     if KTF._SESSION:
@@ -163,12 +168,14 @@ for emotion_axis in emotions:
     feature_tensor = Input(shape=(Train_X.shape[1], Train_X.shape[2], 1))
     extractor = model_structure.compact_cnn_extractor(x=feature_tensor,
                                                       filters=filters, kernels=kernels, poolings=poolings,
-                                                      paddings=paddings, dr_rate=dr_rate)
+                                                      paddings=paddings, dr_rate=dr_rate, strides=strides)
     regressor = model_structure.regression_classifier(x=extractor, units=regressor_units)
     model = Model(inputs=feature_tensor, outputs=regressor)
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
     model.compile(optimizer=adam, loss=loss, metrics=['accuracy'])
-    model.summary()
+    with open(os.path.join(execute_name, 'Model_summary.txt'), 'w') as fh:
+        # Pass the file handle in as a lambda function to make it callable
+        model.summary(print_fn=lambda x: fh.write(x + '\n'))
     if load_pretrained_weights:
         model.load_weights(save_path + '/compact_cnn_weights.h5', by_name=True)
     model_path = execute_name + '/' + emotion_axis + '/'
