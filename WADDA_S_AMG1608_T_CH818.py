@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -13,6 +13,8 @@ import datetime
 from keras.utils import generic_utils
 from keras import backend as K
 from functions.Custom_layers import Std2DLayer
+import random
+from keras.utils.vis_utils import plot_model
 
 
 # GPU speed limit
@@ -29,14 +31,22 @@ def wasserstein_loss(y_true, y_pred):
 
 # Parameters
 algorithm = 'WADDA'
-action = 'pitch+lw'
-action_description = 'Change features to pitch+lw'
-# feature = 'melSpec'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.pitch 5. pitch+lw
+action = 'melSpec_lw'
+action_description = 'Change features to melSpec_lw'
+# 0.melSpec_lw _20180511.1153.51
+# 1.pitch+lw 20180514.0016.35
+# 2.rCTA 20180513.2344.55
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
+# save_path = '../../Data'
 emotions = ['valence', 'arousal']
-source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180509.1449.57'
+if action == 'melSpec_lw':
+    source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180511.1153.51'
+elif action == 'pitch+lw':
+    source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180514.0016.35'
+elif action == 'rCTA':
+    source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180513.2344.55'
 para_File = open(source_execute_name + '/Parameters.txt', 'r')
 parameters = para_File.readlines()
 para_File.close()
@@ -63,6 +73,7 @@ load_weights_source_classifier = True
 load_weights_target_feature_extractor = True
 save_best_only = True
 save_weights_only = False
+enforce_discriminator = True
 now = datetime.datetime.now()
 localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.' +\
             str(now.hour).zfill(2) + str(now.minute).zfill(2) + '.' + str(now.second).zfill(2)
@@ -70,10 +81,18 @@ execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_data
                '_T_' + target_dataset_name + '_' + localtime
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
+discriminator_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
+target_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 # Following parameter and optimizer set as recommended in paper
 clip_value = 0.01
+soft_noise = 0.1
 regressor_units = [128, 64, 1]
 discriminator_units = [128, 64, 1]
+if enforce_discriminator:
+    discriminator_units = [64, 128, 256, 1]
+    discriminator_kernels = [8, 4, 2]
+    discriminator_strides = [4, 2, 1]
+    discriminator_paddings = ['valid', 'valid', 'valid']
 if feature == 'melSpec':  # dim(96, 2498, 1)
     filters = [128, 128, 128]
     kernels = [(96, 10), (1, 6), (1, 4)]
@@ -82,19 +101,19 @@ if feature == 'melSpec':  # dim(96, 2498, 1)
     poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
     dr_rate = [0, 0, 0, 0]
 elif feature == 'melSpec_lw':  # dim(96, 1249, 1)
-    filters = [128, 128, 128]
-    kernels = [(96, 5), (1, 6), (1, 4)]
-    strides = [(1, 4), (1, 6), (1, 4)]
-    paddings = ['valid', 'valid', 'valid']
-    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
-    dr_rate = [0, 0, 0, 0.1]
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(96, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 elif feature == 'rCTA':  # dim(30, 142, 1)
     filters = [128, 128, 128]
     kernels = [(30, 4), (1, 3), (1, 3)]
     strides = [(1, 3), (1, 2), (1, 2)]
     paddings = ['valid', 'valid', 'valid']
     poolings = [(1, 1), (1, 1), (1, 1), (1, 11)]
-    dr_rate = [0, 0, 0, 0.1]
+    dr_rate = [0, 0, 0, 0]
 elif feature == 'pitch':
     filters = [128, 128, 128, 128]
     kernels = [(360, 6), (1, 4), (1, 4), (1, 3)]
@@ -103,12 +122,12 @@ elif feature == 'pitch':
     poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 13)]
     dr_rate = [0, 0, 0, 0, 0]
 elif feature == 'pitch+lw':  # dim(360, 1249, 1)
-    filters = [128, 128, 128]
-    kernels = [(360, 5), (1, 6), (1, 4)]
-    strides = [(1, 4), (1, 6), (1, 4)]
-    paddings = ['valid', 'valid', 'valid']
-    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
-    dr_rate = [0, 0, 0, 0.1]
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(360, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 
 # Parameters saved
 para_line = []
@@ -135,9 +154,16 @@ para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
+para_line.append('discriminator_optimizer:' + str(discriminator_optimizer) + '\n')
+para_line.append('target_optimizer:' + str(target_optimizer) + '\n')
 para_line.append('clip_value:' + str(clip_value) + '\n')
+para_line.append('soft_noise:' + str(soft_noise) + '\n')
 para_line.append('regressor_units:' + str(regressor_units) + '\n')
 para_line.append('discriminator_units:' + str(discriminator_units) + '\n')
+if enforce_discriminator:
+    para_line.append('discriminator_kernels:' + str(discriminator_kernels) + '\n')
+    para_line.append('discriminator_strides:' + str(discriminator_strides) + '\n')
+    para_line.append('discriminator_paddings:' + str(discriminator_paddings) + '\n')
 para_line.append('filters:' + str(filters) + '\n')
 para_line.append('kernels:' + str(kernels) + '\n')
 para_line.append('paddings:' + str(paddings) + '\n')
@@ -172,23 +198,50 @@ for emotion in emotions:
         KTF.clear_session()
         KTF.set_session(get_session())
 
-    sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+    # sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd_no_decay = SGD(lr=0.001, decay=0, momentum=0.9, nesterov=True)
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    optimizer = RMSprop(lr=0.00005)
+    rms = RMSprop(lr=0.001)
+    if discriminator_optimizer == 'rms':
+        dis_opt = rms
+    elif discriminator_optimizer == 'adam':
+        dis_opt = adam
+    elif discriminator_optimizer == 'sgd_no_decay':
+        dis_opt = sgd_no_decay
+
+    if target_optimizer == 'rms':
+        tar_opt = rms
+    elif target_optimizer == 'adam':
+        tar_opt = adam
+    elif target_optimizer == 'sgd_no_decay':
+        tar_opt = sgd_no_decay
+
     # 1
     # Discriminator generated(layer_length: 6)
     #  Input: source or target feature extraction output tensor
     # Output: discriminator output tensor
     source_or_target_tensor = Input(shape=(encoded_size, ))
-    discriminator_model = Model(inputs=source_or_target_tensor,
-                                outputs=model_structure.domain_classifier(x=source_or_target_tensor,
-                                                                          units=discriminator_units,
-                                                                          output_activation='linear'))
-    discriminator_model.compile(loss=wasserstein_loss, optimizer=adam, metrics=['accuracy'])
+    if enforce_discriminator:
+        discriminator_model = Model(inputs=source_or_target_tensor,
+                                    outputs=model_structure.enforced_domain_classifier(x=source_or_target_tensor,
+                                                                                       input_channel=3,
+                                                                                       units=discriminator_units,
+                                                                                       kernels=discriminator_kernels,
+                                                                                       strides=discriminator_strides,
+                                                                                       paddings=discriminator_paddings,
+                                                                                       output_activation='linear'))
+    else:
+        discriminator_model = Model(inputs=source_or_target_tensor,
+                                    outputs=model_structure.domain_classifier(x=source_or_target_tensor,
+                                                                              units=discriminator_units,
+                                                                              output_activation='linear'))
+    discriminator_model.compile(loss=wasserstein_loss, optimizer=dis_opt, metrics=['accuracy'])
     print("discriminator_model summary:")
     with open(os.path.join(execute_name, feature+'$discriminator_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         discriminator_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        plot_model(discriminator_model, to_file=execute_name + '/' + algorithm + '@' + feature +
+                                                'discriminator_model.png', show_shapes=True)
 
     # 2
     # Regression classifier generated(layer_length: 2)
@@ -197,11 +250,13 @@ for emotion in emotions:
     target_tensor = Input(shape=(encoded_size, ))
     classifier_model = Model(inputs=target_tensor,
                              outputs=model_structure.regression_classifier(x=target_tensor,
-                                                                           units=discriminator_units))
+                                                                           units=regressor_units))
     print("classifier_model summary:")
     with open(os.path.join(execute_name, feature+'$classifier_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         classifier_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        plot_model(classifier_model, to_file=execute_name + '/' + algorithm + '@' + feature +
+                                             'classifier_model.png', show_shapes=True)
 
     # 3
     # Source & Target feature extraction(layer_length: 33)
@@ -227,11 +282,13 @@ for emotion in emotions:
     # Output: Discriminator output tensor(from target output)
     target_discriminator_model = Model(inputs=target_feature_tensor,
                                        outputs=discriminator_model(target_feature_extractor))
-    target_discriminator_model.compile(loss=wasserstein_loss, optimizer=adam, metrics=['accuracy'])
+    target_discriminator_model.compile(loss=wasserstein_loss, optimizer=tar_opt, metrics=['accuracy'])
     print("target_discriminator_model summary:")
     with open(os.path.join(execute_name, feature+'$target_discriminator_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         target_discriminator_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        plot_model(target_discriminator_model, to_file=execute_name + '/' + algorithm + '@' + feature +
+                                                       'target_discriminator_model.png', show_shapes=True)
 
     # 5
     # Combine Target(layer_length: 33) and classifier(layer_length: 2)
@@ -243,6 +300,8 @@ for emotion in emotions:
     with open(os.path.join(execute_name, feature+'$target_classifier_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         target_classifier_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        plot_model(target_classifier_model, to_file=execute_name + '/' + algorithm + '@' + feature +
+                                                    'target_classifier_model.png', show_shapes=True)
 
     # 6
     # Load weights
@@ -276,7 +335,6 @@ for emotion in emotions:
     # Generator for source and target data
     source_data_generator = ADDA_funcs.data_generator(Source_Train_X, Source_Train_Y, batch_size)
     target_data_generator = ADDA_funcs.data_generator(Target_Train_X, Target_Train_Y, batch_size)
-    del Source_Train_X
 
     # 9
     # training init
@@ -310,8 +368,8 @@ for emotion in emotions:
             for i in range(k_d):
                 sample_source_x, sample_source_y = next(source_data_generator)
                 sample_target_x, sample_target_y = next(target_data_generator)
-                source_y = -np.ones((len(sample_source_y), 1))
-                target_y = np.ones((len(sample_target_y), 1))
+                source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+                target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
                 source_tensor_output = source_extractor.predict(sample_source_x)
                 target_tensor_output = target_extractor.predict(sample_target_x)
                 discriminator_model.trainable = True
@@ -328,8 +386,8 @@ for emotion in emotions:
             for i in range(k_g):
                 sample_target_x, sample_target_y = next(target_data_generator)
                 sample_target_x0, sample_target_y0 = next(target_data_generator)
-                target_y = -np.ones(len(sample_target_y))
-                target_y0 = -np.ones(len(sample_target_y0))
+                target_y = -np.ones(len(sample_target_y)) + random.uniform(-soft_noise, soft_noise)
+                target_y0 = -np.ones(len(sample_target_y0)) + random.uniform(-soft_noise, soft_noise)
                 discriminator_model.trainable = False
                 loss_f = target_discriminator_model.train_on_batch(sample_target_x, target_y)
                 loss_f0 = target_discriminator_model.train_on_batch(sample_target_x0, target_y0)

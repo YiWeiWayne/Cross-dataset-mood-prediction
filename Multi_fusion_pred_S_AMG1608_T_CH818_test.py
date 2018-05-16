@@ -16,6 +16,8 @@ from keras.layers import Input, concatenate
 from keras.optimizers import SGD, Adam
 from kapre.time_frequency import Melspectrogram
 from keras import backend as K
+from functions.Custom_layers import Std2DLayer
+from keras.utils.vis_utils import plot_model
 
 
 # GPU speed limit
@@ -31,20 +33,23 @@ def wasserstein_loss(y_true, y_pred):
 
 # Parameters
 action = '%ml%rc%pl'
-algorithm = ['', 'ADDA', 'WADDA']
+algorithm = ['', 'WADDA']
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 source_data_num = 1608
 target_data_num = 818
-save_path = '/mnt/data/Wayne'
-source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180427.1613.34'
+# save_path = '/data/Wayne'
+save_path = '../../Data'
+source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180514.0114.37'
 loss = 'mean_squared_error'
 emotions = ['valence', 'arousal']
 features = ['melSpec_lw', 'rCTA', 'pitch+lw']
-actions = ['22K+lw', 'rCTA', 'pitch+lw']
-classifier_units = [1]
+actions = ['melSpec_lw', 'rCTA', 'pitch+lw']
 filters = dict(zip(features, np.zeros((len(features), 5))))
 kernels = dict(zip(features, np.zeros((len(features), 5, 2))))
+strides = dict(zip(features, np.zeros((len(features), 5, 2))))
+paddings = dict(zip(features, np.zeros((len(features), 5, 2))))
+dr_rate = dict(zip(features, np.zeros((len(features), 5, 2))))
 poolings = dict(zip(features, np.zeros((len(features), 5, 2))))
 feature_sizes = dict(zip(features, np.zeros((len(features), 3))))
 for feature in features:
@@ -53,15 +58,21 @@ for feature in features:
         kernels[feature] = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
         poolings[feature] = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 4)]
         feature_sizes[feature] = [96, 2498, 1]
-    elif feature == 'melSpec_lw':
-        filters[feature] = [32, 32, 32, 32, 32]
-        kernels[feature] = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-        poolings[feature] = [(2, 4), (3, 4), (2, 5), (2, 4), (4, 3)]
+    elif feature == 'melSpec_lw':  # dim(96, 1249, 1)
+        filters[feature] = [128, 128, 128, 128, 128]
+        kernels[feature] = [(96, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+        strides[feature] = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+        paddings[feature] = ['valid', 'valid', 'valid', 'valid', 'valid']
+        poolings[feature] = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+        dr_rate[feature] = [0, 0, 0, 0, 0, 0]
         feature_sizes[feature] = [96, 1249, 1]
-    elif feature == 'rCTA':
-        filters[feature] = [32, 32, 32, 32, 32]
-        kernels[feature] = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-        poolings[feature] = [(1, 1), (2, 2), (2, 5), (2, 7), (3, 2)]
+    elif feature == 'rCTA':  # dim(30, 142, 1)
+        filters[feature] = [128, 128, 128]
+        kernels[feature] = [(30, 4), (1, 3), (1, 3)]
+        strides[feature] = [(1, 3), (1, 2), (1, 2)]
+        paddings[feature] = ['valid', 'valid', 'valid']
+        poolings[feature] = [(1, 1), (1, 1), (1, 1), (1, 11)]
+        dr_rate[feature] = [0, 0, 0, 0]
         feature_sizes[feature] = [30, 142, 1]
     elif feature == 'rTA':
         filters[feature] = [32, 32, 32, 32, 32]
@@ -73,40 +84,44 @@ for feature in features:
         kernels[feature] = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
         poolings[feature] = [(5, 8), (4, 4), (2, 5), (3, 5), (3, 3)]
         feature_sizes[feature] = [360, 2498, 1]
-    elif feature == 'pitch+lw':
-        filters[feature] = [32, 32, 32, 32, 32]
-        kernels[feature] = [(3, 3), (3, 3), (3, 3), (3, 3), (3, 3)]
-        poolings[feature] = [(5, 4), (4, 4), (2, 5), (3, 5), (3, 3)]
+    elif feature == 'pitch+lw':  # dim(360, 1249, 1)
+        filters[feature] = [128, 128, 128, 128, 128]
+        kernels[feature] = [(360, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+        strides[feature] = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+        paddings[feature] = ['valid', 'valid', 'valid', 'valid', 'valid']
+        poolings[feature] = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+        dr_rate[feature] = [0, 0, 0, 0, 0, 0]
         feature_sizes[feature] = [360, 1249, 1]
 
+output_sample_rate = 22050
 # Load parameters
-para_File = open(source_execute_name + '/Parameters.txt', 'r')
-parameters = para_File.readlines()
-para_File.close()
-for i in range(0, len(parameters)):
-    if 'output_sample_rate:' in parameters[i]:
-        output_sample_rate = int(parameters[i][len('output_sample_rate:'):-1])
-        print(str(output_sample_rate))
+# para_File = open(source_execute_name + '/Parameters.txt', 'r')
+# parameters = para_File.readlines()
+# para_File.close()
+# for i in range(0, len(parameters)):
+#     if 'output_sample_rate:' in parameters[i]:
+#         output_sample_rate = int(parameters[i][len('output_sample_rate:'):-1])
+#         print(str(output_sample_rate))
 # ADDA models
-pretrain_path = dict(zip(algorithm, [['', '', ''], ['', '', ''], ['', '', '']]))
+pretrain_path = dict(zip(algorithm, [['', '', ''], ['', '', '']]))
 pretrain_path[algorithm[0]] = [
-    save_path + '/(' + actions[0] + ')' + algorithm[0] + source_dataset_name + '_20180422.1036.41',
-    save_path + '/(' + actions[1] + ')' + algorithm[0] + source_dataset_name + '_20180423.1037.52',
-    save_path + '/(' + actions[2] + ')' + algorithm[0] + source_dataset_name + '_20180425.1104.11']
+    save_path + '/(' + actions[0] + ')' + algorithm[0] + source_dataset_name + '_20180511.1153.51',
+    save_path + '/(' + actions[1] + ')' + algorithm[0] + source_dataset_name + '_20180513.2344.55',
+    save_path + '/(' + actions[2] + ')' + algorithm[0] + source_dataset_name + '_20180514.0016.35']
+# pretrain_path[algorithm[1]] = [
+#     save_path + '/(' + actions[0] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180422.1215.44',
+#     save_path + '/(' + actions[1] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180423.1056.32',
+#     save_path + '/(' + actions[2] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180425.2036.06']
 pretrain_path[algorithm[1]] = [
     save_path + '/(' + actions[0] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180422.1215.44',
+    + target_dataset_name + '_20180513.1116.25',
     save_path + '/(' + actions[1] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180423.1056.32',
+    + target_dataset_name + '_20180514.0029.04',
     save_path + '/(' + actions[2] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180425.2036.06']
-pretrain_path[algorithm[2]] = [
-    save_path + '/(' + actions[0] + ')' + algorithm[2] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180426.1616.43',
-    save_path + '/(' + actions[1] + ')' + algorithm[2] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180426.1829.25',
-    save_path + '/(' + actions[2] + ')' + algorithm[2] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180427.0935.09']
+    + target_dataset_name + '_20180514.1140.08']
 
 # Source regressor
 print('Logging classifier model...')
@@ -124,7 +139,7 @@ for feature in features:
     Train_X[feature] = np.load(save_path + '/' + target_dataset_name +
                                '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
     print("Train_X shape:" + str(Train_X[feature].shape))
-for i in range(0, 3):
+for i in range(0, 2):
     print('Logging ' + algorithm[i] + ' model...')
     print('Testing: (adapted)' + target_dataset_name)
     CH818_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
@@ -134,6 +149,7 @@ for i in range(0, 3):
     print('Train_Y_arousal: ' + str(Train_Y['arousal'].shape))
     Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
     R2pr = dict(zip(emotions, [['', '', ''], ['', '', '']]))
+    dict_data = OrderedDict()
     for emotion in emotions:
         Y_true = Train_Y[emotion]
         Y_true = Y_true.reshape(-1, 1)
@@ -148,26 +164,27 @@ for i in range(0, 3):
                     if i == 0:
                         max_temp = max(data['train_R2_pearsonr'])
                     else:
-                        max_temp = max(data['val_R2_pearsonr'])
+                        max_temp = max(data['val_R2_pearsonr'][1:])
             for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
                 for f in files:
                     if os.path.splitext(f)[1] == '.h5' and 'R2pr_' + format(max_temp, '.5f') in f:
                         print(f)
-                        model = load_model(os.path.join(root, f), custom_objects={'Melspectrogram': Melspectrogram,
-                                                                                  'R2': metric.R2,
-                                                                                  'R2pr': metric.R2pr})
+                        model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
+                        plot_model(model, to_file=algorithm[i] + '@' + features[j] + '$model.png', show_shapes=True)
                         Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
                         print(np.square(pearsonr(Y_true, Y_predict[emotion][j])[0][0]))
         Y_pred = np.mean([Y_predict[emotion][0], Y_predict[emotion][1], Y_predict[emotion][2]], axis=0)
         print(Y_pred.shape)
+        Y = np.concatenate((Y_true, Y_pred), axis=1)
+        dict_data.update({emotion: Y})
         CH818_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, Y_pred)[0][0])
         print(target_dataset_name + ': ' + str(CH818_R2_pearsonr_max[emotion]))
     print('CH818 maximum:')
     print('R2_pearsonr_max: ' + str(CH818_R2_pearsonr_max))
     print('Averaging Valence R2_pearsonr_max: ' + str(np.mean(CH818_R2_pearsonr_max['valence'])))
     print('Averaging Arousal R2_pearsonr_max: ' + str(np.mean(CH818_R2_pearsonr_max['arousal'])))
-    data = OrderedDict()
-    data.update({"R2_pearsonr_max": [[emotions[0]], [CH818_R2_pearsonr_max[emotions[0]]],
-                                     [emotions[1]], [CH818_R2_pearsonr_max[emotions[1]]]]})
-    save_data(source_execute_name + '/' + target_dataset_name + '_' + algorithm[i]
-              + '_regressor_' + action + '.xls', data)
+
+    dict_data.update({"R2_pearsonr_max": [[emotions[0]], [CH818_R2_pearsonr_max[emotions[0]]],
+                                          [emotions[1]], [CH818_R2_pearsonr_max[emotions[1]]]]})
+    save_data(save_path + '/' + target_dataset_name + '_' + algorithm[i]
+              + '_regressor_' + action + '.xls', dict_data)

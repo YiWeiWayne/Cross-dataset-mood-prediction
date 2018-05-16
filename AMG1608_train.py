@@ -3,7 +3,7 @@ import keras.backend.tensorflow_backend as KTF
 import os
 import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from functions import model_structure, callback_wayne, Transfer_funcs, metric
 import datetime
 from keras.models import Model
@@ -18,9 +18,9 @@ def get_session(gpu_fraction=0.3):
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
 KTF.set_session(get_session())
 
-action = 'melSpec'
-action_description = 'Change features to melSpec and for larger frequency filter size'
-feature = 'melSpec'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.rTA
+action = 'rCTA'
+action_description = 'Change features to rCTA and 3 layer'
+feature = 'rCTA'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.rTA
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/data/Wayne'
@@ -54,19 +54,19 @@ if feature == 'melSpec':  # dim(96, 2498, 1)
     poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
     dr_rate = [0, 0, 0, 0]
 elif feature == 'melSpec_lw':  # dim(96, 1249, 1)
-    filters = [128, 128, 128]
-    kernels = [(96, 5), (1, 6), (1, 4)]
-    strides = [(1, 4), (1, 6), (1, 4)]
-    paddings = ['valid', 'valid', 'valid']
-    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
-    dr_rate = [0, 0, 0, 0.1]
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(96, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 elif feature == 'rCTA':  # dim(30, 142, 1)
     filters = [128, 128, 128]
     kernels = [(30, 4), (1, 3), (1, 3)]
     strides = [(1, 3), (1, 2), (1, 2)]
     paddings = ['valid', 'valid', 'valid']
     poolings = [(1, 1), (1, 1), (1, 1), (1, 11)]
-    dr_rate = [0, 0, 0, 0.1]
+    dr_rate = [0, 0, 0, 0]
 elif feature == 'pitch':
     filters = [128, 128, 128, 128]
     kernels = [(360, 6), (1, 4), (1, 4), (1, 3)]
@@ -75,12 +75,12 @@ elif feature == 'pitch':
     poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 13)]
     dr_rate = [0, 0, 0, 0, 0]
 elif feature == 'pitch+lw':  # dim(360, 1249, 1)
-    filters = [128, 128, 128]
-    kernels = [(360, 5), (1, 6), (1, 4)]
-    strides = [(1, 4), (1, 6), (1, 4)]
-    paddings = ['valid', 'valid', 'valid']
-    poolings = [(1, 1), (1, 1), (1, 1), (1, 13)]
-    dr_rate = [0, 0, 0, 0.1]
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(360, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 
 para_line = []
 para_line.append('action:' + str(action) + '\n')
