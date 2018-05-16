@@ -4,6 +4,7 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import pearsonr
+import math
 
 
 def data_generator(X_train, y_train, batch_size):
@@ -13,7 +14,7 @@ def data_generator(X_train, y_train, batch_size):
         p = np.random.permutation(len(X_train))  # shuffle each time
         X_train = X_train[p]
         y_train = y_train[p]
-        for i in range(total / batch_size):
+        for i in range(0, int(total / batch_size)):
             yield X_train[i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
 
 
@@ -23,7 +24,7 @@ def multi_data_generator(X_train, y_train, batch_size, features, data_num):
         for feature in features:
             X_train[feature] = X_train[feature][p]
         y_train = y_train[p]
-        for i in range(data_num / batch_size):
+        for i in range(0, int(data_num / batch_size)):
             yield X_train[features[0]][i * batch_size:(i + 1) * batch_size], X_train[features[1]][i * batch_size:(i + 1) * batch_size], X_train[features[2]][i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
 
 
@@ -37,7 +38,7 @@ def data_load_generator(save_path, dataset_name, emotion, output_sample_rate, fe
         p = np.random.permutation(len(Train_X))  # shuffle each time
         X_train = Train_X[p]
         y_train = Train_Y[p]
-        for i in range(total / batch_size):
+        for i in range(0, int(total / batch_size)):
             yield X_train[i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
 
 
@@ -46,7 +47,10 @@ def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_dat
     file_name = model_path + '/log_' + str(run_num)
     val_y_pred = target_classifier_model.predict(val_x, batch_size=4, verbose=0)
     val_y_pred = val_y_pred[:, 0]
-    val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
+    with np.errstate(divide='ignore'):
+        val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
+    if math.isnan(val_R2_pearsonr):
+        val_R2_pearsonr = 0
     log_data["train_loss_fake"].append(loss_fake[0])
     log_data["train_loss_dis"].append(loss_dis[0])
     log_data["val_R2_pearsonr"].append(val_R2_pearsonr)

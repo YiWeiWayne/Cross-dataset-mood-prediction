@@ -27,12 +27,12 @@ def domain_classifier(x, units, output_activation):
     return x
 
 
-def enforced_domain_classifier(x, units, kernels, strides, paddings, output_activation):
+def enforced_domain_classifier(x, input_channel, units, kernels, strides, paddings, output_activation):
     if len(units) > 1:
-        x = Reshape((KTF.int_shape(x)[1], 1))(x)
+        x = Reshape((int(KTF.int_shape(x)[1]/input_channel), input_channel))(x)
         for i in range(0, len(units)-1):
             x = Conv1D(units[i], kernel_size=kernels[i], strides=strides[i], padding=paddings[i])(x)
-            x = BatchNormalization(axis=-1)(x)
+            # x = BatchNormalization(axis=-1)(x)
             x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
         x = Flatten()(x)
     x = Dense(units[len(units)-1], activation=output_activation,
@@ -49,9 +49,9 @@ def regression_classifier(x, units):
     return x
 
 
-def enforced_regression_classifier(x, units, kernels, strides, paddings):
+def enforced_regression_classifier(x, input_channel, units, kernels, strides, paddings):
     if len(units) > 1:
-        x = Reshape((KTF.int_shape(x)[1], 1))(x)
+        x = Reshape((int(KTF.int_shape(x)[1]/input_channel), input_channel))(x)
         for i in range(0, len(units)-1):
             x = Conv1D(filters=units[i],
                        kernel_size=kernels[i],
