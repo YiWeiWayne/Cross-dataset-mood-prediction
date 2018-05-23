@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from functions import model_structure, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -34,7 +34,8 @@ algorithm = 'NPWADDA'
 action = 'melSpec_lw'
 action_description = 'Change features to melSpec_lw ' \
                      'and no pretrained model' \
-                     'and train regressor and GAN simultaneously'
+                     'and train regressor and GAN simultaneously' \
+                     'and add -discriminator loss as regularization term for regressor'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -326,6 +327,21 @@ for emotion in emotions:
     with open(os.path.join(execute_name, feature + '$source_classifier_model_summary.txt'), 'w') as fh:
         source_classifier_model.summary(print_fn=lambda x: fh.write(x + '\n'))
 
+    # 5''
+    # Combine Source and classifier
+    # Input: Raw audio sized Input tensor
+    # Output: classifier output tensor(from target output)
+    source_class_dis_target_dis_model = Model(inputs=[source_feature_tensor, target_feature_tensor],
+                                              outputs=[classifier_model(source_feature_extractor),
+                                                       discriminator_model(source_feature_extractor),
+                                                       discriminator_model(target_feature_extractor)])
+    source_class_dis_target_dis_model.compile(loss=[classifier_loss, wasserstein_loss, wasserstein_loss],
+                                              loss_weights=[1., -1., -1.],
+                                              optimizer=regressor_optimizer, metrics=['accuracy'])
+    print("source_class_dis_target_dis_model summary:")
+    with open(os.path.join(execute_name, feature + '$source_class_dis_target_dis_model_summary.txt'), 'w') as fh:
+        source_class_dis_target_dis_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+
     # 6
     # Load weights
     if os.path.exists(source_execute_name + '/' + emotion + '/log_0_logs.json'):
@@ -366,7 +382,7 @@ for emotion in emotions:
     model_path = execute_name + '/' + emotion + '/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
-    train_loss = np.zeros(shape=len(source_classifier_model.metrics_names))
+    train_loss = np.zeros(shape=len(source_class_dis_target_dis_model.metrics_names))
     val_loss = np.zeros(shape=len(target_classifier_model.metrics_names))
     loss_fake = np.zeros(shape=len(target_discriminator_model.metrics_names))
     loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
@@ -392,7 +408,7 @@ for emotion in emotions:
     # Begin to train target feature extractor and discriminator alternatively
     for epoch in range(0, epochs):
         print('Epoch: ' + str(epoch).zfill(4) + '/' + str(epochs).zfill(4))
-        train_loss = np.zeros(shape=len(source_classifier_model.metrics_names))
+        train_loss = np.zeros(shape=len(source_class_dis_target_dis_model.metrics_names))
         val_loss = np.zeros(shape=len(target_classifier_model.metrics_names))
         loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
         loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
@@ -400,7 +416,14 @@ for emotion in emotions:
         progbar = generic_utils.Progbar(len(Target_Train_Y))
         for t in range(0, total_training_steps):
             sample_source_x, sample_source_y = next(source_data_generator)
-            train_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), train_loss)
+            sample_target_x, sample_target_y = next(target_data_generator)
+            source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            discriminator_model.trainable = False
+            target_feature_extractor.trainable = False
+            train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
+                                                                                 [sample_source_y, source_y, target_y]),
+                                train_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
                                                 ("val_loss", val_loss)])
@@ -432,11 +455,16 @@ for emotion in emotions:
                 loss_f = target_discriminator_model.train_on_batch(sample_target_x, target_y)
                 loss_f0 = target_discriminator_model.train_on_batch(sample_target_x0, target_y0)
                 loss_fake = np.add((np.add(loss_f, loss_f0) / 2), loss_fake)
-            progbar.add(batch_size * (k_g*2 + k_d), values=[("loss_dis", loss_dis),
-                                                            ("loss_fake", loss_fake)])
+            # progbar.add(batch_size * (k_g*2 + k_d), values=[("loss_dis", loss_dis),
+            #                                                 ("loss_fake", loss_fake)])
         for t in range(total_training_steps, regressor_total_training_steps):
             sample_source_x, sample_source_y = next(source_data_generator)
-            train_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), train_loss)
+            sample_target_x, sample_target_y = next(target_data_generator)
+            source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
+                                                                                 [sample_source_y, source_y, target_y]),
+                                train_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
                                                 ("val_loss", val_loss)])
