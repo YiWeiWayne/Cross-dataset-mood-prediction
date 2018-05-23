@@ -32,7 +32,8 @@ def wasserstein_loss(y_true, y_pred):
 # Parameters
 algorithm = 'FWADDA'
 action = 'melSpec_lw'
-action_description = 'Change features to melSpec_lw and add one shot of target data'
+action_description = 'Change features to melSpec_lw and add one shot of target data ' \
+                     'and add R&D loss together to update target'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -302,7 +303,7 @@ for emotion in emotions:
     # Output: classifier output tensor(from target output)
     target_classifier_model = Model(inputs=target_feature_tensor,
                                     outputs=classifier_model(target_feature_extractor))
-    target_classifier_model.compile(loss=classifier_loss, optimizer=adam, metrics=['accuracy'])
+    target_classifier_model.compile(loss=classifier_loss, optimizer=tar_opt, metrics=['accuracy'])
     print("target_classifier_model summary:")
     with open(os.path.join(execute_name, feature+'$target_classifier_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
@@ -311,6 +312,21 @@ for emotion in emotions:
         #                                             'target_classifier_model.png', show_shapes=True)
 
     # 6
+    # Connect target to classifier and discriminator
+    # Input: Raw audio sized Input tensor
+    # Output: classifier output tensor(from target output) & discriminator output tensor(from target output)
+    target_classifier_discriminator_model = Model(inputs=target_feature_tensor,
+                                                  outputs=[classifier_model(target_feature_extractor),
+                                                           discriminator_model(target_feature_extractor)])
+    target_classifier_discriminator_model.compile(loss=[classifier_loss, wasserstein_loss],
+                                                  loss_weights=[1., 1.],
+                                                  optimizer=tar_opt, metrics=['accuracy'])
+    print("target_classifier_discriminator_model summary:")
+    with open(os.path.join(execute_name, feature + 'target_classifier_discriminator_model_summary.txt'), 'w') as fh:
+        # Pass the file handle in as a lambda function to make it callable
+        target_classifier_discriminator_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+
+    # 7
     # Load weights
     if os.path.exists(source_execute_name + '/' + emotion + '/log_0_logs.json'):
         with open(source_execute_name + '/' + emotion + '/log_0_logs.json', "r") as fb:
@@ -332,18 +348,18 @@ for emotion in emotions:
                             print('set classifier')
                             classifier_model.set_weights(model.get_weights()[-2*len(regressor_units):])
 
-    # 7
+    # 8
     # Lock source extractor weights
     source_extractor.trainable = False
     # Lock classifier weights
     classifier_model.trainable = False
 
-    # 8
+    # 9
     # Generator for source and target data
     source_data_generator = ADDA_funcs.data_generator(Source_Train_X, Source_Train_Y, batch_size)
     target_data_generator = ADDA_funcs.data_generator(Target_Train_X, Target_Train_Y, batch_size)
 
-    # 9
+    # 10
     # training init
     total_training_steps = int(len(Target_Train_Y) / (batch_size * (k_g*2 + k_d)))
     model_path = execute_name + '/' + emotion + '/'
@@ -379,7 +395,7 @@ for emotion in emotions:
                                        log_data=log_data, loss_fake=loss_fake, loss_dis=loss_dis,
                                        save_best_only=save_best_only, save_weights_only=save_weights_only)
 
-    # 10
+    # 11
     # Goal: Make discriminator loss high and fake loss low.
     # Begin to train target feature extractor and discriminator alternatively
     for epoch in range(0, epochs):
@@ -389,13 +405,16 @@ for emotion in emotions:
         loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
         loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
         if enable_target_label:
-            loss_reg = np.zeros(shape=len(discriminator_model.metrics_names))
+            loss_reg = np.zeros(shape=len(target_classifier_discriminator_model.metrics_names))
         for t in range(0, total_training_steps):
             if enable_target_label:
                 classifier_model.trainable = False
-                loss_reg = np.add(
-                    target_classifier_model.train_on_batch(Target_Train_X[label_index], Target_Train_Y[label_index]),
-                    loss_reg)
+                discriminator_model.trainable = False
+                loss_tmp = target_classifier_discriminator_model.train_on_batch(Target_Train_X[label_index],
+                                                                                [Target_Train_Y[label_index],
+                                                                                 -np.ones(len(label_index)) +
+                                                                                 random.uniform(-soft_noise, soft_noise)])
+                loss_reg = np.add(loss_tmp, loss_reg)
             # Train discriminator: taget = 1, source = -1, use discriminator model(To discriminate source and target)
             for i in range(k_d):
                 sample_source_x, sample_source_y = next(source_data_generator)
