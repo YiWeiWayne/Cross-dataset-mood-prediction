@@ -34,7 +34,7 @@ algorithm = 'NPWADDA'
 action = 'melSpec_lw'
 action_description = 'Change features to melSpec_lw ' \
                      'and no pretrained model' \
-                     'and train regressor together'
+                     'and train regressor and GAN simultaneously'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -394,20 +394,16 @@ for emotion in emotions:
         print('Epoch: ' + str(epoch).zfill(4) + '/' + str(epochs).zfill(4))
         train_loss = np.zeros(shape=len(source_classifier_model.metrics_names))
         val_loss = np.zeros(shape=len(target_classifier_model.metrics_names))
-        progbar = generic_utils.Progbar(len(Source_Train_Y))
-        for t in range(0, regressor_total_training_steps):
+        loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
+        loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
+        reg_progbar = generic_utils.Progbar(len(Source_Train_Y))
+        progbar = generic_utils.Progbar(len(Target_Train_Y))
+        for t in range(0, total_training_steps):
             sample_source_x, sample_source_y = next(source_data_generator)
             train_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), train_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
-            progbar.add(batch_size, values=[("train_loss", train_loss),
-                                            ("val_loss", val_loss)])
-        train_loss = train_loss/regressor_total_training_steps
-        val_loss = val_loss / regressor_total_training_steps
-        # Generator for source and target data
-        loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
-        loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
-        progbar = generic_utils.Progbar(len(Target_Train_Y))
-        for t in range(0, total_training_steps):
+            reg_progbar.add(batch_size, values=[("train_loss", train_loss),
+                                                ("val_loss", val_loss)])
             # Train discriminator: taget = 1, source = -1, use discriminator model(To discriminate source and target)
             for i in range(k_d):
                 sample_source_x, sample_source_y = next(source_data_generator)
@@ -438,6 +434,14 @@ for emotion in emotions:
                 loss_fake = np.add((np.add(loss_f, loss_f0) / 2), loss_fake)
             progbar.add(batch_size * (k_g*2 + k_d), values=[("loss_dis", loss_dis),
                                                             ("loss_fake", loss_fake)])
+        for t in range(total_training_steps, regressor_total_training_steps):
+            sample_source_x, sample_source_y = next(source_data_generator)
+            train_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), train_loss)
+            val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
+            reg_progbar.add(batch_size, values=[("train_loss", train_loss),
+                                                ("val_loss", val_loss)])
+        train_loss = train_loss / regressor_total_training_steps
+        val_loss = val_loss / regressor_total_training_steps
         loss_fake = loss_fake / (total_training_steps * k_g)
         loss_dis = loss_dis / (total_training_steps * k_d)
         log_data = ADDA_funcs.log_dump_all(model_path=model_path, run_num=0,
