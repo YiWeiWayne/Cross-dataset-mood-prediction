@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from functions import model_structure, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -32,10 +32,10 @@ def wasserstein_loss(y_true, y_pred):
 # Parameters
 algorithm = 'NPWADDA'
 action = 'melSpec_lw'
-action_description = 'Change features to melSpec_lw ' \
-                     'and no pretrained model' \
-                     'and train regressor and GAN simultaneously' \
-                     'and add -discriminator loss as regularization term for regressor'
+action_description = 'Change features to melSpec_lw \n' \
+                     'and no pretrained model \n' \
+                     'and train regressor and GAN simultaneously \n' \
+                     'and add -discriminator loss as regularization term for source feature extractor only \n'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -87,6 +87,7 @@ discriminator_loss = 'binary_crossentropy'
 discriminator_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 target_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 regressor_optimizer = 'adam'
+loss_weights = [1., -1., -1.]
 # Following parameter and optimizer set as recommended in paper
 clip_value = 0.01
 soft_noise = 0.1
@@ -175,6 +176,7 @@ para_line.append('paddings:' + str(paddings) + '\n')
 para_line.append('strides:' + str(strides) + '\n')
 para_line.append('poolings:' + str(poolings) + '\n')
 para_line.append('dr_rate:' + str(dr_rate) + '\n')
+para_line.append('loss_weights:' + str(loss_weights) + '\n')
 
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
@@ -336,7 +338,7 @@ for emotion in emotions:
                                                        discriminator_model(source_feature_extractor),
                                                        discriminator_model(target_feature_extractor)])
     source_class_dis_target_dis_model.compile(loss=[classifier_loss, wasserstein_loss, wasserstein_loss],
-                                              loss_weights=[1., -1., -1.],
+                                              loss_weights=loss_weights,
                                               optimizer=regressor_optimizer, metrics=['accuracy'])
     print("source_class_dis_target_dis_model summary:")
     with open(os.path.join(execute_name, feature + '$source_class_dis_target_dis_model_summary.txt'), 'w') as fh:
@@ -383,11 +385,13 @@ for emotion in emotions:
     if not os.path.exists(model_path):
         os.makedirs(model_path)
     train_loss = np.zeros(shape=len(source_class_dis_target_dis_model.metrics_names))
+    reg_loss = np.zeros(shape=len(source_classifier_model.metrics_names))
     val_loss = np.zeros(shape=len(target_classifier_model.metrics_names))
     loss_fake = np.zeros(shape=len(target_discriminator_model.metrics_names))
     loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
     log_data = {
                 "train_MSE": [],
+                "reg_MSE": [],
                 "val_MSE": [],
                 "train_loss_fake": [],
                 "train_loss_dis": [],
@@ -399,7 +403,8 @@ for emotion in emotions:
                                        train_x=Source_Train_X, train_y=Source_Train_Y,
                                        target_classifier_model=target_classifier_model,
                                        val_x=Target_Train_X, val_y=Target_Train_Y,
-                                       log_data=log_data, train_loss=train_loss, val_loss=val_loss,
+                                       log_data=log_data,
+                                       train_loss=train_loss, reg_loss=reg_loss, val_loss=val_loss,
                                        loss_fake=loss_fake, loss_dis=loss_dis,
                                        save_best_only=save_best_only, save_weights_only=save_weights_only)
 
@@ -409,6 +414,7 @@ for emotion in emotions:
     for epoch in range(0, epochs):
         print('Epoch: ' + str(epoch).zfill(4) + '/' + str(epochs).zfill(4))
         train_loss = np.zeros(shape=len(source_class_dis_target_dis_model.metrics_names))
+        reg_loss = np.zeros(shape=len(source_classifier_model.metrics_names))
         val_loss = np.zeros(shape=len(target_classifier_model.metrics_names))
         loss_fake = np.zeros(shape=len(discriminator_model.metrics_names))
         loss_dis = np.zeros(shape=len(discriminator_model.metrics_names))
@@ -420,12 +426,19 @@ for emotion in emotions:
             source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
             discriminator_model.trainable = False
+            classifier_model.trainable = False
             target_feature_extractor.trainable = False
+            # train source feature extractor
             train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
                                                                                  [sample_source_y, source_y, target_y]),
                                 train_loss)
+            # train source regressor
+            classifier_model.trainable = True
+            source_feature_extractor.trainable = False
+            reg_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), reg_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
+                                                ("reg_loss", reg_loss),
                                                 ("val_loss", val_loss)])
             # Train discriminator: taget = 1, source = -1, use discriminator model(To discriminate source and target)
             for i in range(k_d):
@@ -462,13 +475,23 @@ for emotion in emotions:
             sample_target_x, sample_target_y = next(target_data_generator)
             source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            discriminator_model.trainable = False
+            classifier_model.trainable = False
+            target_feature_extractor.trainable = False
+            # train source feature extractor
             train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
                                                                                  [sample_source_y, source_y, target_y]),
                                 train_loss)
+            # train source regressor
+            classifier_model.trainable = True
+            source_feature_extractor.trainable = False
+            reg_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), reg_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
+                                                ("reg_loss", reg_loss),
                                                 ("val_loss", val_loss)])
         train_loss = train_loss / regressor_total_training_steps
+        reg_loss = reg_loss / regressor_total_training_steps
         val_loss = val_loss / regressor_total_training_steps
         loss_fake = loss_fake / (total_training_steps * k_g)
         loss_dis = loss_dis / (total_training_steps * k_d)
@@ -477,6 +500,7 @@ for emotion in emotions:
                                            train_x=Source_Train_X, train_y=Source_Train_Y,
                                            target_classifier_model=target_classifier_model,
                                            val_x=Target_Train_X, val_y=Target_Train_Y,
-                                           log_data=log_data, train_loss=train_loss, val_loss=val_loss,
+                                           log_data=log_data,
+                                           train_loss=train_loss, reg_loss=reg_loss, val_loss=val_loss,
                                            loss_fake=loss_fake, loss_dis=loss_dis,
                                            save_best_only=save_best_only, save_weights_only=save_weights_only)
