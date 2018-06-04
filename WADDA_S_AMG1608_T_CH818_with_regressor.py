@@ -34,7 +34,9 @@ algorithm = 'NPWADDA'
 action = 'melSpec_lw'
 action_description = 'Change features to melSpec_lw \n' \
                      'and no pretrained model \n' \
-                     'and train regressor and GAN simultaneously \n'
+                     'and train regressor and GAN simultaneously \n' \
+                     'and add discriminator loss as regularization term for source feature extractor only \n' \
+                     'and change discriminator loss to binary_cross_entropy \n'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -83,19 +85,21 @@ execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_data
                '_T_' + target_dataset_name + '_' + localtime
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
-use_wloss = True
+use_wloss = False
+use_clip_weights = True
+use_regularization = True
 if use_wloss:
     dis_output_activation = 'linear'
 else:
     dis_output_activation = 'sigmoid'
-use_regularization = False
 if use_regularization:
     loss_weights = [1., 1., 1.]
+if use_clip_weights:
+    clip_value = 0.01
 discriminator_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 target_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 regressor_optimizer = 'adam'
 # Following parameter and optimizer set as recommended in paper
-clip_value = 0.01
 soft_noise = 0.1
 regressor_units = [128, 64, 1]
 discriminator_units = [500, 500, 1]
@@ -170,7 +174,8 @@ para_line.append('dis_output_activation:' + str(dis_output_activation) + '\n')
 para_line.append('discriminator_optimizer:' + str(discriminator_optimizer) + '\n')
 para_line.append('target_optimizer:' + str(target_optimizer) + '\n')
 para_line.append('regressor_optimizer:' + str(regressor_optimizer) + '\n')
-if use_wloss:
+para_line.append('use_clip_weights:' + str(use_clip_weights) + '\n')
+if use_clip_weights:
     para_line.append('clip_value:' + str(clip_value) + '\n')
 para_line.append('soft_noise:' + str(soft_noise) + '\n')
 para_line.append('regressor_units:' + str(regressor_units) + '\n')
@@ -446,7 +451,10 @@ for emotion in emotions:
         for t in range(0, total_training_steps):
             sample_source_x, sample_source_y = next(source_data_generator)
             sample_target_x, sample_target_y = next(target_data_generator)
-            source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            if use_wloss:
+                source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            else:
+                source_y = np.zeros((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
             if use_regularization:
                 discriminator_model.trainable = False
@@ -468,7 +476,10 @@ for emotion in emotions:
             for i in range(k_d):
                 sample_source_x, sample_source_y = next(source_data_generator)
                 sample_target_x, sample_target_y = next(target_data_generator)
-                source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+                if use_wloss:
+                    source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+                else:
+                    source_y = np.zeros((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
                 target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
                 source_tensor_output = source_extractor.predict(sample_source_x)
                 target_tensor_output = target_extractor.predict(sample_target_x)
@@ -476,7 +487,7 @@ for emotion in emotions:
                 loss_s = discriminator_model.train_on_batch(source_tensor_output, source_y)
                 loss_t = discriminator_model.train_on_batch(target_tensor_output, target_y)
                 loss_dis = np.add((np.add(loss_s, loss_t) / 2), loss_dis)
-                if use_wloss:
+                if use_clip_weights:
                     # Clip discriminator weights
                     for l in discriminator_model.layers:
                         weights = l.get_weights()
@@ -487,8 +498,12 @@ for emotion in emotions:
             for i in range(k_g):
                 sample_target_x, sample_target_y = next(target_data_generator)
                 sample_target_x0, sample_target_y0 = next(target_data_generator)
-                target_y = -np.ones(len(sample_target_y)) + random.uniform(-soft_noise, soft_noise)
-                target_y0 = -np.ones(len(sample_target_y0)) + random.uniform(-soft_noise, soft_noise)
+                if use_wloss:
+                    target_y = -np.ones(len(sample_target_y)) + random.uniform(-soft_noise, soft_noise)
+                    target_y0 = -np.ones(len(sample_target_y0)) + random.uniform(-soft_noise, soft_noise)
+                else:
+                    target_y = np.zeros(len(sample_target_y)) + random.uniform(-soft_noise, soft_noise)
+                    target_y0 = np.zeros(len(sample_target_y0)) + random.uniform(-soft_noise, soft_noise)
                 discriminator_model.trainable = False
                 loss_f = target_discriminator_model.train_on_batch(sample_target_x, target_y)
                 loss_f0 = target_discriminator_model.train_on_batch(sample_target_x0, target_y0)
@@ -498,7 +513,10 @@ for emotion in emotions:
         for t in range(total_training_steps, regressor_total_training_steps):
             sample_source_x, sample_source_y = next(source_data_generator)
             sample_target_x, sample_target_y = next(target_data_generator)
-            source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            if use_wloss:
+                source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
+            else:
+                source_y = np.zeros((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
             if use_regularization:
                 discriminator_model.trainable = False
