@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from functions import model_structure, ADDA_funcs
 from keras.models import Model, load_model
 from keras.layers import Input
@@ -34,8 +34,7 @@ algorithm = 'NPWADDA'
 action = 'melSpec_lw'
 action_description = 'Change features to melSpec_lw \n' \
                      'and no pretrained model \n' \
-                     'and train regressor and GAN simultaneously \n' \
-                     'and add -discriminator loss as regularization term for source feature extractor only \n'
+                     'and train regressor and GAN simultaneously \n'
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -84,10 +83,17 @@ execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_data
                '_T_' + target_dataset_name + '_' + localtime
 classifier_loss = 'mean_squared_error'
 discriminator_loss = 'binary_crossentropy'
+use_wloss = True
+if use_wloss:
+    dis_output_activation = 'linear'
+else:
+    dis_output_activation = 'sigmoid'
+use_regularization = False
+if use_regularization:
+    loss_weights = [1., 1., 1.]
 discriminator_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 target_optimizer = 'rms'  # 2.rms 3. adam 4.sgd_no_decay
 regressor_optimizer = 'adam'
-loss_weights = [1., -1., -1.]
 # Following parameter and optimizer set as recommended in paper
 clip_value = 0.01
 soft_noise = 0.1
@@ -159,10 +165,13 @@ para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('classifier_loss:' + str(classifier_loss) + '\n')
 para_line.append('discriminator_loss:' + str(discriminator_loss) + '\n')
+para_line.append('use_wloss:' + str(use_wloss) + '\n')
+para_line.append('dis_output_activation:' + str(dis_output_activation) + '\n')
 para_line.append('discriminator_optimizer:' + str(discriminator_optimizer) + '\n')
 para_line.append('target_optimizer:' + str(target_optimizer) + '\n')
 para_line.append('regressor_optimizer:' + str(regressor_optimizer) + '\n')
-para_line.append('clip_value:' + str(clip_value) + '\n')
+if use_wloss:
+    para_line.append('clip_value:' + str(clip_value) + '\n')
 para_line.append('soft_noise:' + str(soft_noise) + '\n')
 para_line.append('regressor_units:' + str(regressor_units) + '\n')
 para_line.append('discriminator_units:' + str(discriminator_units) + '\n')
@@ -176,7 +185,9 @@ para_line.append('paddings:' + str(paddings) + '\n')
 para_line.append('strides:' + str(strides) + '\n')
 para_line.append('poolings:' + str(poolings) + '\n')
 para_line.append('dr_rate:' + str(dr_rate) + '\n')
-para_line.append('loss_weights:' + str(loss_weights) + '\n')
+para_line.append('use_regularization:' + str(use_regularization) + '\n')
+if use_regularization:
+    para_line.append('loss_weights:' + str(loss_weights) + '\n')
 
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
@@ -243,13 +254,16 @@ for emotion in emotions:
                                                                                        kernels=discriminator_kernels,
                                                                                        strides=discriminator_strides,
                                                                                        paddings=discriminator_paddings,
-                                                                                       output_activation='linear'))
+                                                                                       output_activation=dis_output_activation))
     else:
         discriminator_model = Model(inputs=source_or_target_tensor,
                                     outputs=model_structure.domain_classifier(x=source_or_target_tensor,
                                                                               units=discriminator_units,
-                                                                              output_activation='linear'))
-    discriminator_model.compile(loss=wasserstein_loss, optimizer=dis_opt, metrics=['accuracy'])
+                                                                              output_activation=dis_output_activation))
+    if use_wloss:
+        discriminator_model.compile(loss=wasserstein_loss, optimizer=dis_opt, metrics=['accuracy'])
+    else:
+        discriminator_model.compile(loss=discriminator_loss, optimizer=dis_opt, metrics=['accuracy'])
     print("discriminator_model summary:")
     with open(os.path.join(execute_name, feature+'$discriminator_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
@@ -296,7 +310,10 @@ for emotion in emotions:
     # Output: Discriminator output tensor(from target output)
     target_discriminator_model = Model(inputs=target_feature_tensor,
                                        outputs=discriminator_model(target_feature_extractor))
-    target_discriminator_model.compile(loss=wasserstein_loss, optimizer=tar_opt, metrics=['accuracy'])
+    if use_wloss:
+        target_discriminator_model.compile(loss=wasserstein_loss, optimizer=tar_opt, metrics=['accuracy'])
+    else:
+        target_discriminator_model.compile(loss=discriminator_loss, optimizer=tar_opt, metrics=['accuracy'])
     print("target_discriminator_model summary:")
     with open(os.path.join(execute_name, feature+'$target_discriminator_model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
@@ -333,16 +350,22 @@ for emotion in emotions:
     # Combine Source and classifier
     # Input: Raw audio sized Input tensor
     # Output: classifier output tensor(from target output)
-    source_class_dis_target_dis_model = Model(inputs=[source_feature_tensor, target_feature_tensor],
-                                              outputs=[classifier_model(source_feature_extractor),
-                                                       discriminator_model(source_feature_extractor),
-                                                       discriminator_model(target_feature_extractor)])
-    source_class_dis_target_dis_model.compile(loss=[classifier_loss, wasserstein_loss, wasserstein_loss],
-                                              loss_weights=loss_weights,
-                                              optimizer=regressor_optimizer, metrics=['accuracy'])
-    print("source_class_dis_target_dis_model summary:")
-    with open(os.path.join(execute_name, feature + '$source_class_dis_target_dis_model_summary.txt'), 'w') as fh:
-        source_class_dis_target_dis_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+    if use_regularization:
+        source_class_dis_target_dis_model = Model(inputs=[source_feature_tensor, target_feature_tensor],
+                                                  outputs=[classifier_model(source_feature_extractor),
+                                                           discriminator_model(source_feature_extractor),
+                                                           discriminator_model(target_feature_extractor)])
+        if use_wloss:
+            source_class_dis_target_dis_model.compile(loss=[classifier_loss, wasserstein_loss, wasserstein_loss],
+                                                      loss_weights=loss_weights,
+                                                      optimizer=regressor_optimizer, metrics=['accuracy'])
+        else:
+            source_class_dis_target_dis_model.compile(loss=[classifier_loss, discriminator_loss, discriminator_loss],
+                                                      loss_weights=loss_weights,
+                                                      optimizer=regressor_optimizer, metrics=['accuracy'])
+        print("source_class_dis_target_dis_model summary:")
+        with open(os.path.join(execute_name, feature + '$source_class_dis_target_dis_model_summary.txt'), 'w') as fh:
+            source_class_dis_target_dis_model.summary(print_fn=lambda x: fh.write(x + '\n'))
 
     # 6
     # Load weights
@@ -425,16 +448,17 @@ for emotion in emotions:
             sample_target_x, sample_target_y = next(target_data_generator)
             source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
-            discriminator_model.trainable = False
-            classifier_model.trainable = False
-            target_feature_extractor.trainable = False
-            # train source feature extractor
-            train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
-                                                                                 [sample_source_y, source_y, target_y]),
-                                train_loss)
-            # train source regressor
-            classifier_model.trainable = True
-            source_feature_extractor.trainable = False
+            if use_regularization:
+                discriminator_model.trainable = False
+                classifier_model.trainable = False
+                target_feature_extractor.trainable = False
+                # train source feature extractor
+                train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
+                                                                                     [sample_source_y, source_y, target_y]),
+                                    train_loss)
+                # train source regressor
+                classifier_model.trainable = True
+                source_feature_extractor.trainable = False
             reg_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), reg_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
@@ -452,11 +476,12 @@ for emotion in emotions:
                 loss_s = discriminator_model.train_on_batch(source_tensor_output, source_y)
                 loss_t = discriminator_model.train_on_batch(target_tensor_output, target_y)
                 loss_dis = np.add((np.add(loss_s, loss_t) / 2), loss_dis)
-                # Clip discriminator weights
-                for l in discriminator_model.layers:
-                    weights = l.get_weights()
-                    weights = [np.clip(w, -clip_value, clip_value) for w in weights]
-                    l.set_weights(weights)
+                if use_wloss:
+                    # Clip discriminator weights
+                    for l in discriminator_model.layers:
+                        weights = l.get_weights()
+                        weights = [np.clip(w, -clip_value, clip_value) for w in weights]
+                        l.set_weights(weights)
             # Train taget feature extractor, use combined model: target label=-1
             # Trick: inverted target label, to make target similar to source)
             for i in range(k_g):
@@ -475,16 +500,17 @@ for emotion in emotions:
             sample_target_x, sample_target_y = next(target_data_generator)
             source_y = -np.ones((len(sample_source_y), 1)) + random.uniform(-soft_noise, soft_noise)
             target_y = np.ones((len(sample_target_y), 1)) + random.uniform(-soft_noise, soft_noise)
-            discriminator_model.trainable = False
-            classifier_model.trainable = False
-            target_feature_extractor.trainable = False
-            # train source feature extractor
-            train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
-                                                                                 [sample_source_y, source_y, target_y]),
-                                train_loss)
-            # train source regressor
-            classifier_model.trainable = True
-            source_feature_extractor.trainable = False
+            if use_regularization:
+                discriminator_model.trainable = False
+                classifier_model.trainable = False
+                target_feature_extractor.trainable = False
+                # train source feature extractor
+                train_loss = np.add(source_class_dis_target_dis_model.train_on_batch([sample_source_x, sample_target_x],
+                                                                                     [sample_source_y, source_y, target_y]),
+                                    train_loss)
+                # train source regressor
+                classifier_model.trainable = True
+                source_feature_extractor.trainable = False
             reg_loss = np.add(source_classifier_model.train_on_batch(sample_source_x, sample_source_y), reg_loss)
             val_loss = np.add(target_classifier_model.test_on_batch(Target_Train_X, Target_Train_Y), val_loss)
             reg_progbar.add(batch_size, values=[("train_loss", train_loss),
