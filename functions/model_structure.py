@@ -18,6 +18,36 @@ def extract_melspec(sr=12000, input_tensor=None, tf='melgram', fmin=0.0, fmax=60
     return x
 
 
+def nn_classifier(x, units, activations):
+    for i in range(0, len(units)-1):
+        if activations[i] == 'elu':
+            x = Dense(units[i], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+            x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+        else:
+            x = Dense(units[i], activation=activations[i],
+                      kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    x = Dense(units[len(units)-1], activation=activations[len(units)-1],
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
+def cnn_classifier(x, input_channel, units, kernels, strides, paddings, activations):
+    if len(units) > 1:
+        x = Reshape((int(KTF.int_shape(x)[1]/input_channel), input_channel))(x)
+        for i in range(0, len(units)-1):
+            if activations[i] == 'elu':
+                x = Conv1D(units[i], kernel_size=kernels[i], strides=strides[i], padding=paddings[i])(x)
+                # x = BatchNormalization(axis=-1)(x)
+                x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
+            else:
+                x = Conv1D(units[i], activation=activations[i],
+                           kernel_size=kernels[i], strides=strides[i], padding=paddings[i])(x)
+        x = Flatten()(x)
+    x = Dense(units[len(units)-1], activation=activations[len(units)-1],
+              kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)
+    return x
+
+
 def domain_classifier(x, units, output_activation):
     for i in range(0, len(units)-1):
         x = Dense(units[i], kernel_initializer='glorot_uniform', bias_initializer='glorot_uniform')(x)

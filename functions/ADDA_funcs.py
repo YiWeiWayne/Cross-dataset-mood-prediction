@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import pearsonr
 import math
+from sklearn.metrics import mean_squared_error
 
 
 def data_generator(X_train, y_train, batch_size):
@@ -42,10 +43,10 @@ def data_load_generator(save_path, dataset_name, emotion, output_sample_rate, fe
             yield X_train[i * batch_size:(i + 1) * batch_size], y_train[i * batch_size:(i + 1) * batch_size]
 
 
-def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_data, loss_fake, loss_dis,
+def log_dump(model_path, run_num, target_regressor_model, val_x, val_y, log_data, loss_fake, loss_dis,
              save_best_only, save_weights_only):
     file_name = model_path + '/log_' + str(run_num)
-    val_y_pred = target_classifier_model.predict(val_x, batch_size=4, verbose=0)
+    val_y_pred = target_regressor_model.predict(val_x, batch_size=4, verbose=0)
     val_y_pred = val_y_pred[:, 0]
     with np.errstate(divide='ignore'):
         val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
@@ -90,7 +91,7 @@ def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_dat
         print('val_R2_pearsonr_log_max: ' + str(max(log_data['val_R2_pearsonr'][1:])))
         if val_R2_pearsonr >= max(log_data['val_R2_pearsonr'][1:]):
             print('improved!')
-            model_save(model=target_classifier_model,
+            model_save(model=target_regressor_model,
                        save_weights_only=save_weights_only,
                        filepath=model_path +
                                 'loss_fake_' + format(loss_fake[0], '.5f') +
@@ -99,7 +100,7 @@ def log_dump(model_path, run_num, target_classifier_model, val_x, val_y, log_dat
         else:
             print('No improved!')
     else:
-        model_save(model=target_classifier_model,
+        model_save(model=target_regressor_model,
                    save_weights_only=save_weights_only,
                    filepath=model_path +
                             'loss_fake_' + format(loss_fake[0], '.5f') +
@@ -115,10 +116,10 @@ def model_save(model, filepath, save_weights_only):
         model.save(filepath + '.h5', overwrite=True)
 
 
-def log_dump_reg(model_path, run_num, target_classifier_model, val_x, val_y, log_data, loss_reg, loss_fake, loss_dis,
+def log_dump_reg(model_path, run_num, target_regressor_model, val_x, val_y, log_data, loss_reg, loss_fake, loss_dis,
                  save_best_only, save_weights_only):
     file_name = model_path + '/log_' + str(run_num)
-    val_y_pred = target_classifier_model.predict(val_x, batch_size=4, verbose=0)
+    val_y_pred = target_regressor_model.predict(val_x, batch_size=4, verbose=0)
     val_y_pred = val_y_pred[:, 0]
     with np.errstate(divide='ignore'):
         val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
@@ -173,7 +174,7 @@ def log_dump_reg(model_path, run_num, target_classifier_model, val_x, val_y, log
         print('val_R2_pearsonr_log_max: ' + str(max(log_data['val_R2_pearsonr'][1:])))
         if val_R2_pearsonr >= max(log_data['val_R2_pearsonr'][1:]):
             print('improved!')
-            model_save(model=target_classifier_model,
+            model_save(model=target_regressor_model,
                        save_weights_only=save_weights_only,
                        filepath=model_path +
                                 'loss_fake_' + format(loss_fake[0], '.5f') +
@@ -182,10 +183,114 @@ def log_dump_reg(model_path, run_num, target_classifier_model, val_x, val_y, log
         else:
             print('No improved!')
     else:
-        model_save(model=target_classifier_model,
+        model_save(model=target_regressor_model,
                    save_weights_only=save_weights_only,
                    filepath=model_path +
                             'loss_fake_' + format(loss_fake[0], '.5f') +
                             '_loss_dis_' + format(loss_dis[0], '.5f') +
                             '_R2pr_' + format(val_R2_pearsonr, '.5f'))
+    return log_data
+
+
+def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
+                 target_regressor_model, val_x, val_y, log_data, train_loss, reg_loss, val_loss, loss_fake, loss_dis,
+                 save_best_only, save_weights_only):
+    file_name = model_path + '/log_' + str(run_num)
+    train_y_pred = source_regressor_model.predict(train_x, batch_size=4, verbose=0)
+    train_y_pred = train_y_pred[:, 0]
+    val_y_pred = target_regressor_model.predict(val_x, batch_size=4, verbose=0)
+    val_y_pred = val_y_pred[:, 0]
+    with np.errstate(divide='ignore'):
+        train_R2_pearsonr = np.square(pearsonr(train_y, train_y_pred)[0])
+        val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
+    if math.isnan(val_R2_pearsonr):
+        val_R2_pearsonr = 0
+    if math.isnan(train_R2_pearsonr):
+        train_R2_pearsonr = 0
+    log_data["train_MSE"].append(train_loss[0])
+    log_data["reg_MSE"].append(reg_loss[0])
+    log_data["val_MSE"].append(val_loss[0])
+    log_data["train_loss_fake"].append(loss_fake[0])
+    log_data["train_loss_dis"].append(loss_dis[0])
+    log_data["train_R2_pearsonr"].append(train_R2_pearsonr)
+    log_data["val_R2_pearsonr"].append(val_R2_pearsonr)
+    with open(file_name + "_logs.json", "w") as fb:
+        json.dump(log_data, fb)
+    print("train_MSE: ", train_loss)
+    print("reg_MSE: ", reg_loss)
+    print("val_MSE: ", val_loss)
+    print("loss_fake: ", loss_fake)
+    print("loss_dis: ", loss_dis)
+    print("train_R2_pearsonr: ", train_R2_pearsonr)
+    print("val_R2_pearsonr: ", val_R2_pearsonr)
+
+    # summarize history for R2_pearsonr
+    plt.plot(log_data['train_MSE'])
+    plt.plot(log_data['reg_MSE'])
+    plt.plot(log_data['val_MSE'])
+    plt.title('model MSE')
+    plt.ylabel('MSE')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'reg', 'val'], loc='upper left')
+    plt.savefig(file_name + "_MSE.png")
+    plt.close()
+
+    # summarize history for train_loss_fake
+    plt.plot(log_data['train_loss_fake'])
+    plt.plot(log_data['train_loss_dis'])
+    plt.title('model train_loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['fake', 'dis'], loc='upper left')
+    plt.savefig(file_name + "_train_loss.png")
+    plt.close()
+
+    # summarize history for R2_pearsonr
+    plt.plot(log_data['train_R2_pearsonr'])
+    plt.plot(log_data['val_R2_pearsonr'])
+    plt.title('model pearson R square')
+    plt.ylabel('R2_pearsonr')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    plt.savefig(file_name + "_R2_pearsonr.png")
+    plt.close()
+
+    # save target model
+    if save_best_only and len(log_data['val_R2_pearsonr']) > 2:
+        print('val_R2_pearsonr: ' + str(val_R2_pearsonr))
+        print('val_R2_pearsonr_log_max: ' + str(max(log_data['val_R2_pearsonr'][1:])))
+        if val_R2_pearsonr >= max(log_data['val_R2_pearsonr'][1:]):
+            print('validation improved!')
+            model_save(model=target_regressor_model,
+                       save_weights_only=save_weights_only,
+                       filepath=model_path + 'target_'
+                                'train_R2pr_' + format(train_R2_pearsonr, '.5f') +
+                                '_val_R2pr_' + format(val_R2_pearsonr, '.5f') + '.h5')
+        else:
+            print('No improved!')
+    else:
+        model_save(model=target_regressor_model,
+                   save_weights_only=save_weights_only,
+                   filepath=model_path + 'target_'
+                            'train_R2pr_' + format(train_R2_pearsonr, '.5f') +
+                            '_val_R2pr_' + format(val_R2_pearsonr, '.5f') + '.h5')
+    # save source model
+    if save_best_only and len(log_data['train_R2_pearsonr']):
+        print('train_R2_pearsonr: ' + str(train_R2_pearsonr))
+        print('train_R2_pearsonr_log_max: ' + str(max(log_data['train_R2_pearsonr'])))
+        if train_R2_pearsonr >= max(log_data['train_R2_pearsonr']):
+            print('training improved!')
+            model_save(model=source_regressor_model,
+                       save_weights_only=save_weights_only,
+                       filepath=model_path + 'source_'
+                                'train_R2pr_' + format(train_R2_pearsonr, '.5f') +
+                                '_val_R2pr_' + format(val_R2_pearsonr, '.5f') + '.h5')
+        else:
+            print('No improved!')
+    else:
+        model_save(model=source_regressor_model,
+                   save_weights_only=save_weights_only,
+                   filepath=model_path + 'source_'
+                            'train_R2pr_' + format(train_R2_pearsonr, '.5f') +
+                            '_val_R2pr_' + format(val_R2_pearsonr, '.5f') + '.h5')
     return log_data
