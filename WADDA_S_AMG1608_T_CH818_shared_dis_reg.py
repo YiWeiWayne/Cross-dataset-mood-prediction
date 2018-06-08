@@ -19,7 +19,7 @@ from keras.layers import Dense
 
 
 # GPU speed limit
-def get_session(gpu_fraction=1):
+def get_session(gpu_fraction=0.3):
     # Assume that you have 6GB of GPU memory and want to allocate ~2GB
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
@@ -32,13 +32,13 @@ def wasserstein_loss(y_true, y_pred):
 
 # setting Parameters
 algorithm = 'NPSRDWADDA'
-action = 'melSpec_lw'
+action = 'rCTA'
 feature = action
-action_description = 'Change features to melSpec_lw \n' \
+action_description = 'Change features to rCTA \n' \
                      'and no pretrained model \n' \
                      'and train regressor and GAN simultaneously \n' \
                      'and balance updating times for discriminator and regressor \n' \
-                     'and share discriminator and regressor \n'
+                     'and share dis & reg \n'
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
@@ -245,7 +245,7 @@ for emotion in emotions:
 
     # Optimizer
     sgd_no_decay = SGD(lr=0.001, decay=0, momentum=0.9, nesterov=True)
-    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
+    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None)
     rms = RMSprop(lr=0.001)
     # regressor
     if regressor_optimizer == 'rms':
@@ -285,7 +285,8 @@ for emotion in emotions:
                                     outputs=model_structure.nn_classifier(x=source_or_target_tensor,
                                                                           units=discriminator_units,
                                                                           activations=discriminator_activations))
-    if discriminator_loss == 'wloss':
+    if use_wloss:
+        print('wloss!')
         discriminator_model.compile(loss=wasserstein_loss, optimizer=dis_opt, metrics=['accuracy'])
     else:
         discriminator_model.compile(loss=discriminator_loss, optimizer=dis_opt, metrics=['accuracy'])
@@ -347,7 +348,8 @@ for emotion in emotions:
     # Combine Target and discriminator
     target_discriminator_model = Model(inputs=target_feature_tensor,
                                        outputs=discriminator_model(target_feature_extractor))
-    if discriminator_loss == 'wloss':
+    if use_wloss:
+        print('wloss!')
         target_discriminator_model.compile(loss=wasserstein_loss, optimizer=tar_opt, metrics=['accuracy'])
     else:
         target_discriminator_model.compile(loss=discriminator_loss, optimizer=tar_opt, metrics=['accuracy'])
@@ -361,7 +363,7 @@ for emotion in emotions:
     # Combine Target and regressor
     target_regressor_model = Model(inputs=target_feature_tensor,
                                    outputs=regressor_model(target_feature_extractor))
-    target_regressor_model.compile(loss=regressor_loss, optimizer=reg_opt, metrics=['accuracy'])
+    target_regressor_model.compile(loss=regressor_loss, optimizer=regressor_optimizer, metrics=['accuracy'])
     print("target_regressor_model summary:")
     with open(os.path.join(execute_name, feature+'$target_regressor_model_summary.txt'), 'w') as fh:
         target_regressor_model.summary(print_fn=lambda x: fh.write(x + '\n'))
@@ -372,7 +374,7 @@ for emotion in emotions:
     # Combine Source and regressor
     source_regressor_model = Model(inputs=source_feature_tensor,
                                    outputs=regressor_model(source_feature_extractor))
-    source_regressor_model.compile(loss=regressor_loss, optimizer=reg_opt, metrics=['accuracy'])
+    source_regressor_model.compile(loss=regressor_loss, optimizer=regressor_optimizer, metrics=['accuracy'])
     print("source_regressor_model summary:")
     with open(os.path.join(execute_name, feature + '$source_regressor_model_summary.txt'), 'w') as fh:
         source_regressor_model.summary(print_fn=lambda x: fh.write(x + '\n'))
