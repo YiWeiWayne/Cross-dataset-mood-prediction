@@ -18,6 +18,8 @@ from kapre.time_frequency import Melspectrogram
 from keras import backend as K
 from functions.Custom_layers import Std2DLayer
 from keras.utils.vis_utils import plot_model
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 
 
 # GPU speed limit
@@ -33,18 +35,19 @@ def wasserstein_loss(y_true, y_pred):
 
 # Parameters
 action = '%ml%rc%pl'
-algorithm = ['', 'WADDA']
+algorithm = ['NPSRDWADDA']
+feature_index = [1, 2]
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 source_data_num = 1608
 target_data_num = 818
-# save_path = '/data/Wayne'
-save_path = '../../Data'
-source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180514.0114.37'
+save_path = '/mnt/data/Wayne'
+# save_path = '../../Data'
+# source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180514.0114.37'
 loss = 'mean_squared_error'
 emotions = ['valence', 'arousal']
-features = ['melSpec_lw', 'rCTA', 'pitch+lw']
-actions = ['melSpec_lw', 'rCTA', 'pitch+lw']
+features = ['melSpec_lw', 'pitch+lw', 'rCTA']
+actions = ['melSpec_lw', 'pitch+lw', 'rCTA']
 filters = dict(zip(features, np.zeros((len(features), 5))))
 kernels = dict(zip(features, np.zeros((len(features), 5, 2))))
 strides = dict(zip(features, np.zeros((len(features), 5, 2))))
@@ -94,20 +97,11 @@ for feature in features:
         feature_sizes[feature] = [360, 1249, 1]
 
 output_sample_rate = 22050
-# Load parameters
-# para_File = open(source_execute_name + '/Parameters.txt', 'r')
-# parameters = para_File.readlines()
-# para_File.close()
-# for i in range(0, len(parameters)):
-#     if 'output_sample_rate:' in parameters[i]:
-#         output_sample_rate = int(parameters[i][len('output_sample_rate:'):-1])
-#         print(str(output_sample_rate))
-# ADDA models
 pretrain_path = dict(zip(algorithm, [['', '', ''], ['', '', '']]))
-pretrain_path[algorithm[0]] = [
-    save_path + '/(' + actions[0] + ')' + algorithm[0] + source_dataset_name + '_20180511.1153.51',
-    save_path + '/(' + actions[1] + ')' + algorithm[0] + source_dataset_name + '_20180513.2344.55',
-    save_path + '/(' + actions[2] + ')' + algorithm[0] + source_dataset_name + '_20180514.0016.35']
+# pretrain_path[algorithm[0]] = [
+#     save_path + '/(' + actions[0] + ')' + algorithm[0] + source_dataset_name + '_20180511.1153.51',
+#     save_path + '/(' + actions[1] + ')' + algorithm[0] + source_dataset_name + '_20180514.0016.35',
+#     save_path + '/(' + actions[2] + ')' + algorithm[0] + source_dataset_name + '_20180513.2344.55']
 # pretrain_path[algorithm[1]] = [
 #     save_path + '/(' + actions[0] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
 #     + target_dataset_name + '_20180422.1215.44',
@@ -115,13 +109,24 @@ pretrain_path[algorithm[0]] = [
 #     + target_dataset_name + '_20180423.1056.32',
 #     save_path + '/(' + actions[2] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
 #     + target_dataset_name + '_20180425.2036.06']
-pretrain_path[algorithm[1]] = [
-    save_path + '/(' + actions[0] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180513.1116.25',
-    save_path + '/(' + actions[1] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180514.0029.04',
-    save_path + '/(' + actions[2] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180514.1140.08']
+
+# no share dis & reg
+pretrain_path[algorithm[0]] = [
+    save_path + '/(' + actions[0] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+    + target_dataset_name + '_20180607.1629.34',
+    save_path + '/(' + actions[1] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+    + target_dataset_name + '_20180607.2013.24',
+    save_path + '/(' + actions[2] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+    + target_dataset_name + '_20180607.2015.00']
+
+# # share dis & reg
+# pretrain_path[algorithm[0]] = [
+#     save_path + '/(' + actions[0] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180607.2049.51',
+#     save_path + '/(' + actions[1] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180608.2048.00',
+#     save_path + '/(' + actions[2] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
+#     + target_dataset_name + '_20180608.1156.59']
 
 # Source regressor
 print('Logging classifier model...')
@@ -139,52 +144,161 @@ for feature in features:
     Train_X[feature] = np.load(save_path + '/' + target_dataset_name +
                                '/Train_X@' + str(output_sample_rate) + 'Hz_' + feature + '.npy')
     print("Train_X shape:" + str(Train_X[feature].shape))
-for i in range(0, 2):
-    print('Logging ' + algorithm[i] + ' model...')
-    print('Testing: (adapted)' + target_dataset_name)
-    CH818_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
-    source_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
-    target_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
-    print('Train_Y_valence: ' + str(Train_Y['valence'].shape))
-    print('Train_Y_arousal: ' + str(Train_Y['arousal'].shape))
-    Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
-    R2pr = dict(zip(emotions, [['', '', ''], ['', '', '']]))
-    dict_data = OrderedDict()
-    for emotion in emotions:
-        Y_true = Train_Y[emotion]
-        Y_true = Y_true.reshape(-1, 1)
-        print(emotion)
-        print('Loading target feature extractor_classifier model...')
-        for j in range(0, 3):
+
+# Single model
+for j in range(0, 3):
+    for i in range(0, 1):
+        print('Logging ' + algorithm[i] + ' model...')
+        print('Testing: (adapted)' + target_dataset_name)
+        source_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        source_MAE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        source_MSE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_MAE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_MSE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        print('Train_Y_valence: ' + str(Train_Y['valence'].shape))
+        print('Train_Y_arousal: ' + str(Train_Y['arousal'].shape))
+        source_Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
+        target_Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
+        source_dict_data = OrderedDict()
+        target_dict_data = OrderedDict()
+        for emotion in emotions:
+            Y_true = Train_Y[emotion]
+            Y_true = Y_true.reshape(-1, 1)
+            print(emotion)
+            print('Loading target feature extractor_classifier model...')
             if os.path.exists(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json'):
                 with open(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json',
                           "r") as fb:
                     print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
                     data = json.load(fb)
-                    if i == 0:
-                        max_temp = max(data['train_R2_pearsonr'])
-                    else:
-                        max_temp = max(data['val_R2_pearsonr'][1:])
+                    train_max_temp = max(data['train_R2_pearsonr'])
+                    val_max_temp = max(data['val_R2_pearsonr'])
             for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
                 for f in files:
-                    if os.path.splitext(f)[1] == '.h5' and 'R2pr_' + format(max_temp, '.5f') in f:
+                    if os.path.splitext(f)[1] == '.h5' and 'train_R2pr_' + format(train_max_temp, '.5f') in f:
+                        print('Source ' + actions[j])
                         print(f)
                         model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
-                        plot_model(model, to_file=algorithm[i] + '@' + features[j] + '$model.png', show_shapes=True)
-                        Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
-                        print(np.square(pearsonr(Y_true, Y_predict[emotion][j])[0][0]))
-        Y_pred = np.mean([Y_predict[emotion][0], Y_predict[emotion][1], Y_predict[emotion][2]], axis=0)
-        print(Y_pred.shape)
-        Y = np.concatenate((Y_true, Y_pred), axis=1)
-        dict_data.update({emotion: Y})
-        CH818_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, Y_pred)[0][0])
-        print(target_dataset_name + ': ' + str(CH818_R2_pearsonr_max[emotion]))
-    print('CH818 maximum:')
-    print('R2_pearsonr_max: ' + str(CH818_R2_pearsonr_max))
-    print('Averaging Valence R2_pearsonr_max: ' + str(np.mean(CH818_R2_pearsonr_max['valence'])))
-    print('Averaging Arousal R2_pearsonr_max: ' + str(np.mean(CH818_R2_pearsonr_max['arousal'])))
+                        source_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                        Y = np.concatenate((Y_true, source_Y_predict[emotion][j]), axis=1)
+                        source_dict_data.update({emotion: Y})
+                        source_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, source_Y_predict[emotion][j])[0][0])
+                        source_MAE_max[emotion] = mean_absolute_error(Y_true, source_Y_predict[emotion][j])
+                        source_MSE_max[emotion] = mean_squared_error(Y_true, source_Y_predict[emotion][j])
+                        print(source_R2_pearsonr_max[emotion])
+                    elif os.path.splitext(f)[1] == '.h5' and 'val_R2pr_' + format(val_max_temp, '.5f') in f:
+                        print('Target ' + actions[j])
+                        print(f)
+                        model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
+                        target_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                        Y = np.concatenate((Y_true, target_Y_predict[emotion][j]), axis=1)
+                        target_dict_data.update({emotion: Y})
+                        target_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, target_Y_predict[emotion][j])[0][0])
+                        target_MAE_max[emotion] = mean_absolute_error(Y_true, target_Y_predict[emotion][j])
+                        target_MSE_max[emotion] = mean_squared_error(Y_true, target_Y_predict[emotion][j])
+                        print(target_R2_pearsonr_max[emotion])
+        print('CH818 maximum:')
+        print('source_R2_pearsonr_max: ' + str(source_R2_pearsonr_max))
+        print('target_R2_pearsonr_max: ' + str(target_R2_pearsonr_max))
+        source_dict_data.update({"R2_pearsonr_max": [[emotions[0]], [source_R2_pearsonr_max[emotions[0]]],
+                                                     [emotions[1]], [source_R2_pearsonr_max[emotions[1]]]]})
+        source_dict_data.update({"MAE_max": [[emotions[0]], [source_MAE_max[emotions[0]]],
+                                             [emotions[1]], [source_MAE_max[emotions[1]]]]})
+        source_dict_data.update({"MSE_max": [[emotions[0]], [source_MSE_max[emotions[0]]],
+                                             [emotions[1]], [source_MSE_max[emotions[1]]]]})
+        save_data(pretrain_path[algorithm[i]][j] + '/source_regressor_' + actions[j] + '.xls', source_dict_data)
+        target_dict_data.update({"R2_pearsonr_max": [[emotions[0]], [target_R2_pearsonr_max[emotions[0]]],
+                                                     [emotions[1]], [target_R2_pearsonr_max[emotions[1]]]]})
+        target_dict_data.update({"MAE_max": [[emotions[0]], [target_MAE_max[emotions[0]]],
+                                             [emotions[1]], [target_MAE_max[emotions[1]]]]})
+        target_dict_data.update({"MSE_max": [[emotions[0]], [target_MSE_max[emotions[0]]],
+                                             [emotions[1]], [target_MSE_max[emotions[1]]]]})
+        save_data(pretrain_path[algorithm[i]][j] + '/target_regressor_' + actions[j] + '.xls', target_dict_data)
 
-    dict_data.update({"R2_pearsonr_max": [[emotions[0]], [CH818_R2_pearsonr_max[emotions[0]]],
-                                          [emotions[1]], [CH818_R2_pearsonr_max[emotions[1]]]]})
-    save_data(save_path + '/' + target_dataset_name + '_' + algorithm[i]
-              + '_regressor_' + action + '.xls', dict_data)
+# Fusion
+for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:
+    for i in range(0, 1):
+        print('Logging ' + algorithm[i] + ' model...')
+        print('Testing: (adapted)' + target_dataset_name)
+        source_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        source_MAE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        source_MSE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_MAE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        target_MSE_max = dict(zip(emotions, np.zeros((len(emotions)))))
+        print('Train_Y_valence: ' + str(Train_Y['valence'].shape))
+        print('Train_Y_arousal: ' + str(Train_Y['arousal'].shape))
+        source_Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
+        target_Y_predict = dict(zip(emotions, [['', '', ''], ['', '', '']]))
+        source_dict_data = OrderedDict()
+        target_dict_data = OrderedDict()
+        for emotion in emotions:
+            Y_true = Train_Y[emotion]
+            Y_true = Y_true.reshape(-1, 1)
+            print(emotion)
+            print('Loading target feature extractor_classifier model...')
+            for j in feature_index:
+                if os.path.exists(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json'):
+                    with open(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json',
+                              "r") as fb:
+                        print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
+                        data = json.load(fb)
+                        train_max_temp = max(data['train_R2_pearsonr'])
+                        val_max_temp = max(data['val_R2_pearsonr'][1:])
+                for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
+                    for f in files:
+                        if os.path.splitext(f)[1] == '.h5' and 'train_R2pr_' + format(train_max_temp, '.5f') in f:
+                            print('Source ' + actions[j])
+                            print(f)
+                            model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
+                            source_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                            print(np.square(pearsonr(Y_true, source_Y_predict[emotion][j])[0][0]))
+                        elif os.path.splitext(f)[1] == '.h5' and 'val_R2pr_' + format(val_max_temp, '.5f') in f:
+                            print('Target ' + actions[j])
+                            print(f)
+                            model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
+                            target_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                            print(np.square(pearsonr(Y_true, target_Y_predict[emotion][j])[0][0]))
+            # source
+            Y_pred = np.zeros(Y_true.shape)
+            for j in feature_index:
+                Y_pred = np.add(source_Y_predict[emotion][j], Y_pred)
+            Y_pred = Y_pred/len(feature_index)
+            print(Y_pred.shape)
+            Y = np.concatenate((Y_true, Y_pred), axis=1)
+            source_dict_data.update({emotion: Y})
+            source_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, Y_pred)[0][0])
+            source_MAE_max[emotion] = mean_absolute_error(Y_true, Y_pred)
+            source_MSE_max[emotion] = mean_squared_error(Y_true, Y_pred)
+            print(source_R2_pearsonr_max[emotion])
+            # target
+            Y_pred = np.zeros(Y_true.shape)
+            for j in feature_index:
+                Y_pred = np.add(target_Y_predict[emotion][j], Y_pred)
+            Y_pred = Y_pred / len(feature_index)
+            print(Y_pred.shape)
+            Y = np.concatenate((Y_true, Y_pred), axis=1)
+            target_dict_data.update({emotion: Y})
+            target_R2_pearsonr_max[emotion] = np.square(pearsonr(Y_true, Y_pred)[0][0])
+            target_MAE_max[emotion] = mean_absolute_error(Y_true, Y_pred)
+            target_MSE_max[emotion] = mean_squared_error(Y_true, Y_pred)
+            print(target_R2_pearsonr_max[emotion])
+        print('CH818 maximum:')
+        print('source_R2_pearsonr_max: ' + str(source_R2_pearsonr_max))
+        print('target_R2_pearsonr_max: ' + str(target_R2_pearsonr_max))
+        source_dict_data.update({"R2_pearsonr_max": [[emotions[0]], [source_R2_pearsonr_max[emotions[0]]],
+                                                     [emotions[1]], [source_R2_pearsonr_max[emotions[1]]]]})
+        source_dict_data.update({"MAE_max": [[emotions[0]], [source_MAE_max[emotions[0]]],
+                                             [emotions[1]], [source_MAE_max[emotions[1]]]]})
+        source_dict_data.update({"MSE_max": [[emotions[0]], [source_MSE_max[emotions[0]]],
+                                             [emotions[1]], [source_MSE_max[emotions[1]]]]})
+        save_data(save_path + '/source_regressor_' + action + '_' + str(feature_index) + '.xls', source_dict_data)
+        target_dict_data.update({"R2_pearsonr_max": [[emotions[0]], [target_R2_pearsonr_max[emotions[0]]],
+                                                     [emotions[1]], [target_R2_pearsonr_max[emotions[1]]]]})
+        target_dict_data.update({"MAE_max": [[emotions[0]], [target_MAE_max[emotions[0]]],
+                                             [emotions[1]], [target_MAE_max[emotions[1]]]]})
+        target_dict_data.update({"MSE_max": [[emotions[0]], [target_MSE_max[emotions[0]]],
+                                             [emotions[1]], [target_MSE_max[emotions[1]]]]})
+        save_data(save_path + '/target_regressor_' + action + '_' + str(feature_index) +
+                  '.xls', target_dict_data)
