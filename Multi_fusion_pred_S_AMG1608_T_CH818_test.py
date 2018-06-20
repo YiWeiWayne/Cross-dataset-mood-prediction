@@ -35,15 +35,15 @@ def wasserstein_loss(y_true, y_pred):
 
 # Parameters
 action = '%ml%rc%pl'
-algorithm = ['NPSRDWADDA']
-feature_index = [1, 2]
+algorithm = ['NPWADDA']
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 source_data_num = 1608
 target_data_num = 818
-save_path = '/mnt/data/Wayne'
+save_path = '/data/Wayne'
 # save_path = '../../Data'
 # source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_20180514.0114.37'
+save_key = 'pearsonr'  # 1.R2 2.pearsonr
 loss = 'mean_squared_error'
 emotions = ['valence', 'arousal']
 features = ['melSpec_lw', 'pitch+lw', 'rCTA']
@@ -113,20 +113,11 @@ pretrain_path = dict(zip(algorithm, [['', '', ''], ['', '', '']]))
 # no share dis & reg
 pretrain_path[algorithm[0]] = [
     save_path + '/(' + actions[0] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180607.1629.34',
+    + target_dataset_name + '_20180614.1652.41',
     save_path + '/(' + actions[1] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180607.2013.24',
+    + target_dataset_name + '_20180614.1652.15',
     save_path + '/(' + actions[2] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-    + target_dataset_name + '_20180607.2015.00']
-
-# # share dis & reg
-# pretrain_path[algorithm[0]] = [
-#     save_path + '/(' + actions[0] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-#     + target_dataset_name + '_20180607.2049.51',
-#     save_path + '/(' + actions[1] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-#     + target_dataset_name + '_20180608.2048.00',
-#     save_path + '/(' + actions[2] + ')' + algorithm[0] + '_S_' + source_dataset_name + '_T_'
-#     + target_dataset_name + '_20180608.1156.59']
+    + target_dataset_name + '_20180614.1653.03']
 
 # Source regressor
 print('Logging classifier model...')
@@ -146,8 +137,8 @@ for feature in features:
     print("Train_X shape:" + str(Train_X[feature].shape))
 
 # Single model
-for j in range(0, 3):
-    for i in range(0, 1):
+for j in range(0, 3):  # feature
+    for i in range(0, 1):  # algorithm
         print('Logging ' + algorithm[i] + ' model...')
         print('Testing: (adapted)' + target_dataset_name)
         source_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
@@ -172,8 +163,12 @@ for j in range(0, 3):
                           "r") as fb:
                     print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
                     data = json.load(fb)
-                    train_max_temp = max(data['train_R2_pearsonr'])
-                    val_max_temp = max(data['val_R2_pearsonr'])
+                    if save_key == 'pearsonr':
+                        train_max_temp = np.square(max(data['train_pearsonr']))
+                        val_max_temp = np.square(max(data['val_pearsonr']))
+                    else:
+                        train_max_temp = max(data['train_R2_pearsonr'])
+                        val_max_temp = max(data['val_R2_pearsonr'])
             for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
                 for f in files:
                     if os.path.splitext(f)[1] == '.h5' and 'train_R2pr_' + format(train_max_temp, '.5f') in f:
@@ -217,8 +212,8 @@ for j in range(0, 3):
         save_data(pretrain_path[algorithm[i]][j] + '/target_regressor_' + actions[j] + '.xls', target_dict_data)
 
 # Fusion
-for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:
-    for i in range(0, 1):
+for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:  # fusion feature
+    for i in range(0, 1):  # algorithm
         print('Logging ' + algorithm[i] + ' model...')
         print('Testing: (adapted)' + target_dataset_name)
         source_R2_pearsonr_max = dict(zip(emotions, np.zeros((len(emotions)))))
@@ -244,8 +239,19 @@ for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:
                               "r") as fb:
                         print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
                         data = json.load(fb)
-                        train_max_temp = max(data['train_R2_pearsonr'])
-                        val_max_temp = max(data['val_R2_pearsonr'][1:])
+                        if save_key == 'pearsonr':
+                            train_max_temp = np.square(max(data['train_pearsonr']))
+                            val_max_temp = np.square(max(data['val_pearsonr']))
+                            train_sign = np.sign(data['train_pearsonr'][np.argmax(data['train_pearsonr'])])
+                            val_sign = np.sign(data['val_pearsonr'][np.argmax(data['val_pearsonr'])])
+                        else:
+                            train_max_temp = max(data['train_R2_pearsonr'])
+                            val_max_temp = max(data['val_R2_pearsonr'])
+                            train_sign = np.sign(data['train_pearsonr'][np.argmax(data['train_R2_pearsonr'])])
+                            val_sign = np.sign(data['val_pearsonr'][np.argmax(data['val_R2_pearsonr'])])
+                        print('val_:'+str(val_max_temp))
+                        print('val_pearsonr:' + str(data['val_pearsonr'][np.argmax(data['val_pearsonr'])]))
+                        print('val_sign:' + str(val_sign))
                 for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
                     for f in files:
                         if os.path.splitext(f)[1] == '.h5' and 'train_R2pr_' + format(train_max_temp, '.5f') in f:
@@ -253,12 +259,14 @@ for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:
                             print(f)
                             model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
                             source_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                            source_Y_predict[emotion][j] = source_Y_predict[emotion][j] * train_sign
                             print(np.square(pearsonr(Y_true, source_Y_predict[emotion][j])[0][0]))
                         elif os.path.splitext(f)[1] == '.h5' and 'val_R2pr_' + format(val_max_temp, '.5f') in f:
                             print('Target ' + actions[j])
                             print(f)
                             model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
                             target_Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
+                            target_Y_predict[emotion][j] = target_Y_predict[emotion][j] * val_sign
                             print(np.square(pearsonr(Y_true, target_Y_predict[emotion][j])[0][0]))
             # source
             Y_pred = np.zeros(Y_true.shape)

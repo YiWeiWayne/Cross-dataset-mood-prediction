@@ -18,13 +18,14 @@ def get_session(gpu_fraction=0.3):
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
 KTF.set_session(get_session())
 
-action = 'rCTA'
-action_description = 'Change features to rCTA and 3 layer'
-feature = 'rCTA'  # 1.melSpec 2.rCTA 3.melSpec_lw 4.rTA
+action = 'melSpec_lw'
+action_description = 'Change regressor to cnn \n' \
+                     'and save model pearsonr'
+feature = action  # 1.melSpec 2.rCTA 3.melSpec_lw 4.pitch+lw
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
-save_path = '/data/Wayne'
-emotions = ['arousal']
+save_path = '/mnt/data/Wayne'
+emotions = ['valence', 'arousal']
 source_dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
 source_label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
 target_dataset_path = save_path + '/Dataset/CH818/mp3'
@@ -38,14 +39,24 @@ now = datetime.datetime.now()
 localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.' +\
             str(now.hour).zfill(2) + str(now.minute).zfill(2) + '.' + str(now.second).zfill(2)
 execute_name = save_path + '/(' + action + ')' + source_dataset_name + '_' + localtime
-loss = 'mean_squared_error'
-# loss = 'mean_absolute_error'
 save_best_only = False
 save_weights_only = False
-monitor = 'train_R2_pearsonr'
+monitor = 'train_pearsonr'
 mode = 'max'
 load_pretrained_weights = False
-regressor_units = [128, 64, 1]
+regressor_net = 'cnn'
+# regressor parameters
+if regressor_net == 'nn':
+    regressor_units = [128, 64, 1]
+    regressor_activations = ['elu', 'elu', 'tanh']
+elif regressor_net == 'cnn':
+    regressor_units = [64, 128, 256, 1]
+    regressor_activations = ['elu', 'elu', 'elu', 'tanh']
+    regressor_kernels = [8, 4, 2]
+    regressor_strides = [4, 2, 1]
+    regressor_paddings = ['valid', 'valid', 'valid']
+regressor_optimizer = 'adam'
+regressor_loss = 'mean_squared_error'
 if feature == 'melSpec':  # dim(96, 2498, 1)
     filters = [128, 128, 128]
     kernels = [(96, 10), (1, 6), (1, 4)]
@@ -99,7 +110,6 @@ para_line.append('output_sample_rate:' + str(output_sample_rate) + '\n')
 para_line.append('patience:' + str(patience) + '\n')
 para_line.append('batch_size:' + str(batch_size) + '\n')
 para_line.append('epochs:' + str(epochs) + '\n')
-para_line.append('loss:' + str(loss) + '\n')
 para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('monitor:' + str(monitor) + '\n')
@@ -112,6 +122,17 @@ para_line.append('paddings:' + str(paddings) + '\n')
 para_line.append('strides:' + str(strides) + '\n')
 para_line.append('poolings:' + str(poolings) + '\n')
 para_line.append('dr_rate:' + str(dr_rate) + '\n')
+
+# regressor
+para_line.append('\n# regressor Parameters \n')
+para_line.append('regressor_units:' + str(regressor_units) + '\n')
+para_line.append('regressor_activations :' + str(regressor_activations ) + '\n')
+if regressor_net == 'cnn':
+    para_line.append('regressor_kernels :' + str(regressor_kernels ) + '\n')
+    para_line.append('regressor_strides :' + str(regressor_strides ) + '\n')
+    para_line.append('regressor_paddings :' + str(regressor_paddings ) + '\n')
+para_line.append('regressor_loss:' + str(regressor_loss) + '\n')
+para_line.append('regressor_optimizer:' + str(regressor_optimizer) + '\n')
 if not os.path.exists(execute_name):
     os.makedirs(execute_name)
 paraFile = open(os.path.join(execute_name, 'Parameters.txt'), 'w')
@@ -169,13 +190,26 @@ for emotion_axis in emotions:
     extractor = model_structure.compact_cnn_extractor(x=feature_tensor,
                                                       filters=filters, kernels=kernels, poolings=poolings,
                                                       paddings=paddings, dr_rate=dr_rate, strides=strides)
-    regressor = model_structure.regression_classifier(x=extractor, units=regressor_units)
+    if regressor_net == 'nn':
+        regressor_model = Model(inputs=extractor,
+                                outputs=model_structure.nn_classifier(x=target_tensor,
+                                                                      units=regressor_units,
+                                                                      activations=regressor_activations))
+    elif regressor_net == 'cnn':
+        regressor = model_structure.cnn_classifier(x=extractor,
+                                                   input_channel=3,
+                                                   units=regressor_units,
+                                                   activations=regressor_activations,
+                                                   kernels=regressor_kernels,
+                                                   strides=regressor_strides,
+                                                   paddings=regressor_paddings)
     model = Model(inputs=feature_tensor, outputs=regressor)
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    model.compile(optimizer=adam, loss=loss, metrics=['accuracy'])
+    model.compile(optimizer=regressor_optimizer, loss=regressor_loss, metrics=['accuracy'])
     with open(os.path.join(execute_name, 'Model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         model.summary(print_fn=lambda x: fh.write(x + '\n'))
+    model.summary()
     if load_pretrained_weights:
         model.load_weights(save_path + '/compact_cnn_weights.h5', by_name=True)
     model_path = execute_name + '/' + emotion_axis + '/'

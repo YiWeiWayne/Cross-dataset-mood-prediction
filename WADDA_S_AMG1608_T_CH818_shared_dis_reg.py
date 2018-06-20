@@ -31,14 +31,17 @@ def wasserstein_loss(y_true, y_pred):
 
 
 # setting Parameters
-algorithm = 'NPSRDWADDA'
-action = 'rCTA'
+algorithm = 'NPWADDA'
+action = 'pitch+lw'
+# melSpec_lw
+# pitch+lw
+# rCTA
 feature = action
-action_description = 'Change features to rCTA \n' \
+action_description = 'Change features to pitch+lw \n' \
                      'and no pretrained model \n' \
                      'and train regressor and GAN simultaneously \n' \
                      'and balance updating times for discriminator and regressor \n' \
-                     'and share dis & reg \n'
+                     'choose model by pearsonr'
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
@@ -55,6 +58,9 @@ load_weights_source_classifier = False
 load_weights_target_feature_extractor = False
 save_best_only = True
 save_weights_only = False
+save_source_model = True
+source_epoch_th = 1
+target_epoch_th = 1
 
 # network parameters
 batch_size = 16
@@ -63,7 +69,7 @@ epochs = 4000
 k_d = 5
 k_g = 1
 balance_dis_reg = True
-use_shared_dis_reg = True
+use_shared_dis_reg = False
 if use_shared_dis_reg:
     reg_output_activation = 'tanh'
 soft_noise = 0.1
@@ -72,7 +78,7 @@ discriminator_net = 'cnn'
 
 # regressor parameters
 if regressor_net == 'nn':
-    regressor_units = [64, 128, 1]
+    regressor_units = [128, 64, 1]
     regressor_activations = ['elu', 'elu', 'tanh']
 elif regressor_net == 'cnn':
     regressor_units = [64, 128, 256, 1]
@@ -85,7 +91,7 @@ regressor_loss = 'mean_squared_error'
 
 # discriminator parameters
 if discriminator_net == 'nn':
-    discriminator_units = [64, 128, 1]
+    discriminator_units = [128, 64, 1]
     discriminator_activations = ['elu', 'elu', 'sigmoid']
 elif discriminator_net == 'cnn':
     discriminator_units = [64, 128, 256, 1]
@@ -168,6 +174,10 @@ para_line.append('load_weights_source_classifier:' + str(load_weights_source_cla
 para_line.append('load_weights_target_feature_extractor:' + str(load_weights_target_feature_extractor) + '\n')
 para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
+para_line.append('save_source_model:' + str(save_source_model) + '\n')
+para_line.append('source_epoch_th:' + str(source_epoch_th) + '\n')
+para_line.append('target_epoch_th:' + str(target_epoch_th) + '\n')
+
 # network
 para_line.append('\n# network Parameters \n')
 para_line.append('batch_size:' + str(batch_size) + '\n')
@@ -429,7 +439,11 @@ for emotion in emotions:
                 "train_loss_fake": [],
                 "train_loss_dis": [],
                 "train_R2_pearsonr": [],
+                "source_val_R2_pearsonr": [],
                 "val_R2_pearsonr": [],
+                "train_pearsonr": [],
+                "source_val_pearsonr": [],
+                "val_pearsonr": [],
                 }
     log_data = ADDA_funcs.log_dump_all(model_path=model_path, run_num=0,
                                        source_regressor_model=source_regressor_model,
@@ -439,7 +453,9 @@ for emotion in emotions:
                                        log_data=log_data,
                                        train_loss=train_loss, reg_loss=reg_loss, val_loss=val_loss,
                                        loss_fake=loss_fake, loss_dis=loss_dis,
-                                       save_best_only=save_best_only, save_weights_only=save_weights_only)
+                                       save_best_only=save_best_only, save_weights_only=save_weights_only,
+                                       save_source_model=save_source_model,
+                                       source_epoch_th=source_epoch_th, target_epoch_th=target_epoch_th)
 
     # 10
     # Goal: Make discriminator loss high and fake loss low.
@@ -560,4 +576,6 @@ for emotion in emotions:
                                            log_data=log_data,
                                            train_loss=train_loss, reg_loss=reg_loss, val_loss=val_loss,
                                            loss_fake=loss_fake, loss_dis=loss_dis,
-                                           save_best_only=save_best_only, save_weights_only=save_weights_only)
+                                           save_best_only=save_best_only, save_weights_only=save_weights_only,
+                                           save_source_model=save_source_model,
+                                           source_epoch_th=source_epoch_th, target_epoch_th=target_epoch_th)
