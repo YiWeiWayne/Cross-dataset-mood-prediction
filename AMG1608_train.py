@@ -94,9 +94,10 @@ elif feature == 'pitch+lw':  # dim(360, 1249, 1)
     dr_rate = [0, 0, 0, 0, 0, 0]
 
 para_line = []
+para_line.append('# setting Parameters \n')
 para_line.append('action:' + str(action) + '\n')
-para_line.append('action_description:' + str(action_description) + '\n')
 para_line.append('feature:' + feature + '\n')
+para_line.append('action_description:' + str(action_description) + '\n')
 para_line.append('source_dataset_name:' + source_dataset_name + '\n')
 para_line.append('target_dataset_name:' + target_dataset_name + '\n')
 para_line.append('source_dataset_path:' + source_dataset_path + '\n')
@@ -105,17 +106,23 @@ para_line.append('target_dataset_path:' + target_dataset_path + '\n')
 para_line.append('target_label_path:' + target_label_path + '\n')
 para_line.append('save_path:' + save_path + '\n')
 para_line.append('execute_name:' + execute_name + '\n')
+para_line.append('emotions :' + str(emotions) + '\n')
 para_line.append('sec_length:' + str(sec_length) + '\n')
 para_line.append('output_sample_rate:' + str(output_sample_rate) + '\n')
+para_line.append('load_pretrained_weights:' + str(load_pretrained_weights) + '\n')
 para_line.append('patience:' + str(patience) + '\n')
-para_line.append('batch_size:' + str(batch_size) + '\n')
-para_line.append('epochs:' + str(epochs) + '\n')
 para_line.append('save_best_only:' + str(save_best_only) + '\n')
 para_line.append('save_weights_only:' + str(save_weights_only) + '\n')
 para_line.append('monitor:' + str(monitor) + '\n')
 para_line.append('mode:' + str(mode) + '\n')
-para_line.append('load_pretrained_weights:' + str(load_pretrained_weights) + '\n')
-para_line.append('regressor_units:' + str(regressor_units) + '\n')
+
+# network
+para_line.append('\n# network Parameters \n')
+para_line.append('batch_size:' + str(batch_size) + '\n')
+para_line.append('epochs:' + str(epochs) + '\n')
+
+# Feature extractor
+para_line.append('\n# Feature extractor Parameters \n')
 para_line.append('filters:' + str(filters) + '\n')
 para_line.append('kernels:' + str(kernels) + '\n')
 para_line.append('paddings:' + str(paddings) + '\n')
@@ -191,10 +198,9 @@ for emotion_axis in emotions:
                                                       filters=filters, kernels=kernels, poolings=poolings,
                                                       paddings=paddings, dr_rate=dr_rate, strides=strides)
     if regressor_net == 'nn':
-        regressor_model = Model(inputs=extractor,
-                                outputs=model_structure.nn_classifier(x=target_tensor,
-                                                                      units=regressor_units,
-                                                                      activations=regressor_activations))
+        regressor = model_structure.nn_classifier(x=extractor,
+                                                  units=regressor_units,
+                                                  activations=regressor_activations)
     elif regressor_net == 'cnn':
         regressor = model_structure.cnn_classifier(x=extractor,
                                                    input_channel=3,
