@@ -52,18 +52,18 @@ class LossR2Logger_ModelCheckPoint(Callback):
     def on_train_begin(self, logs={}):
         self.log_data = {
             "train_loss": [],
-            "train_R2": [],
             "train_R2_pearsonr": [],
+            "train_pearsonr": [],
             "val_loss": [],
-            "val_R2": [],
             "val_R2_pearsonr": [],
+            "val_pearsonr": [],
             }
 
     def on_epoch_end(self, epoch, logs={}):
         train_x, train_y = self.train_data
         val_x, val_y = self.val_data
-        train_y_pred = self.model.predict(train_x, verbose=0)
-        val_y_pred = self.model.predict(val_x, verbose=0)
+        train_y_pred = self.model.predict(train_x, batch_size=4, verbose=0)
+        val_y_pred = self.model.predict(val_x, batch_size=4, verbose=0)
         train_y_pred = train_y_pred[:, 0]
         val_y_pred = val_y_pred[:, 0]
         # print('train_y_pred: ' + str(train_y_pred))
@@ -71,21 +71,19 @@ class LossR2Logger_ModelCheckPoint(Callback):
         # Statistics computation
         train_R2_pearsonr = np.square(pearsonr(train_y, train_y_pred)[0])
         val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
-        train_R2 = r2_score(train_y, train_y_pred)
-        val_R2 = r2_score(val_y, val_y_pred)
-        train_MSE = mean_squared_error(train_y, train_y_pred)
-        val_MSE = mean_squared_error(val_y, val_y_pred)
-        train_MAE = mean_absolute_error(train_y, train_y_pred)
-        val_MAE = mean_absolute_error(val_y, val_y_pred)
+        train_pearsonr = pearsonr(train_y, train_y_pred)[0]
+        val_pearsonr = pearsonr(val_y, val_y_pred)[0]
+        # train_R2 = r2_score(train_y, train_y_pred)
+        # val_R2 = r2_score(val_y, val_y_pred)
         # Statistics print
-        print('\nTraining MSE: {}, MAE: {}, R2: {}, R2_pearsonr: {}\n'.format(train_MSE, train_MAE, train_R2, train_R2_pearsonr))
-        print('Validation MSE: {}, MAE: {}, R2: {}, R2_pearsonr: {}\n'.format(val_MSE, val_MAE, val_R2, val_R2_pearsonr))
+        print('\nTraining pearsonr: {}, R2_pearsonr: {}\n'.format(train_pearsonr, train_R2_pearsonr))
+        print('Validation pearsonr: {}, R2_pearsonr: {}\n'.format(val_pearsonr, val_R2_pearsonr))
         self.log_data["train_loss"].append(logs.get('loss'))
-        self.log_data["train_R2"].append(train_R2)
         self.log_data["train_R2_pearsonr"].append(train_R2_pearsonr)
+        self.log_data["train_pearsonr"].append(train_pearsonr)
         self.log_data["val_loss"].append(logs.get('val_loss'))
-        self.log_data["val_R2"].append(val_R2)
         self.log_data["val_R2_pearsonr"].append(val_R2_pearsonr)
+        self.log_data["val_pearsonr"].append(val_pearsonr)
         with open(self.file_name + "_logs.json", "w") as fb:
             json.dump(self.log_data, fb)
 
@@ -99,14 +97,14 @@ class LossR2Logger_ModelCheckPoint(Callback):
         plt.savefig(self.file_name + "_loss.png")
         plt.close()
 
-        # summarize history for R2
-        plt.plot(self.log_data['train_R2'])
-        plt.plot(self.log_data['val_R2'])
-        plt.title('model R square')
-        plt.ylabel('R2')
+        # summarize history for pearsonr
+        plt.plot(self.log_data['train_pearsonr'])
+        plt.plot(self.log_data['val_pearsonr'])
+        plt.title('model pearson')
+        plt.ylabel('pearsonr')
         plt.xlabel('epoch')
         plt.legend(['train', 'val'], loc='upper left')
-        plt.savefig(self.file_name + "_R2.png")
+        plt.savefig(self.file_name + "_pearsonr.png")
         plt.close()
 
         # summarize history for R2_pearsonr
@@ -155,7 +153,6 @@ class LossR2Logger_ModelCheckPoint(Callback):
                     self.model.save_weights(filepath, overwrite=True)
                 else:
                     self.model.save(filepath, overwrite=True)
-
 
 
 class Loss_Logger(Callback):

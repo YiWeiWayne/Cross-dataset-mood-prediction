@@ -290,7 +290,8 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     if save_best_only and len(log_data['val_pearsonr']) > target_epoch_th:
         print('val_pearsonr: ' + str(val_pearsonr))
         print('val_pearsonr_log_max: ' + str(max(log_data['val_pearsonr'][target_epoch_th-1:])))
-        if val_pearsonr >= max(log_data['val_pearsonr'][target_epoch_th-1:]):
+        if val_pearsonr >= max(log_data['val_pearsonr'][target_epoch_th-1:]) or \
+                        val_R2_pearsonr >= max(log_data['val_R2_pearsonr'][target_epoch_th-1:]):
             print('validation improved!')
             model_save(model=target_regressor_model,
                        save_weights_only=save_weights_only,
@@ -310,7 +311,8 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
         if save_best_only and len(log_data['train_pearsonr']) > source_epoch_th:
             print('train_pearsonr: ' + str(train_pearsonr))
             print('train_pearsonr_log_max: ' + str(max(log_data['train_pearsonr'][source_epoch_th-1:])))
-            if train_pearsonr >= max(log_data['train_pearsonr'][source_epoch_th-1:]):
+            if train_pearsonr >= max(log_data['train_pearsonr'][source_epoch_th-1:]) or \
+                            train_R2_pearsonr >= max(log_data['train_R2_pearsonr'][source_epoch_th - 1:]):
                 print('training improved!')
                 model_save(model=source_regressor_model,
                            save_weights_only=save_weights_only,
