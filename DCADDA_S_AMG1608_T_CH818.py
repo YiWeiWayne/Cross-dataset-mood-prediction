@@ -35,10 +35,10 @@ def wasserstein_loss(y_true, y_pred):
 
 # setting Parameters
 algorithm = 'DCADDA'
-action = 'pitch+lw'
+action = 'melSpec_lw'
 feature = action
 action_description = 'Change regressor to CNN \n' \
-                     'use DCGAN'
+                     'use DCGAN \n' \
 # 0.melSpec_lw _20180511.1153.51
 # 1.pitch+lw 20180514.0016.35
 # 2.rCTA 20180513.2344.55
@@ -50,7 +50,7 @@ localtime = str(now.year) + str(now.month).zfill(2) + str(now.day).zfill(2) + '.
             str(now.hour).zfill(2) + str(now.minute).zfill(2) + '.' + str(now.second).zfill(2)
 execute_name = save_path + '/(' + action + ')' + algorithm + '_S_' + source_dataset_name + \
                '_T_' + target_dataset_name + '_' + localtime
-emotions = ['arousal', 'valence']
+emotions = ['valence', 'arousal']
 if action == 'melSpec_lw':
     source_execute_name = save_path + '/(' + action + ')' + source_dataset_name + 'DCGAN_20180629.0252.07'
 elif action == 'pitch+lw':
@@ -72,7 +72,7 @@ save_key = 'pearsonr'  # 1.R2 2.pearsonr
 # network parameters
 batch_size = 16
 encoded_size = 128
-epochs = 200
+epochs = 2000
 k_d = 1
 k_g = 1
 use_shared_dis_reg = False
@@ -127,9 +127,16 @@ elif discriminator_net == 'cnn_bn':
     discriminator_strides = [4, 3, 2]
     discriminator_paddings = ['valid', 'valid', 'valid']
     discriminator_bn = True
+if feature == 'rCTA':
+    discriminator_units = [32, 64, 128, 256, 1]
+    discriminator_activations = ['elu', 'elu', 'elu', 'elu', 'sigmoid']
+    discriminator_kernels = [4, 3, 3, 3]
+    discriminator_strides = [2, 2, 3, 3]
+    discriminator_paddings = ['valid', 'valid', 'valid', 'valid']
 discriminator_optimizer = 'adam'  # 2.rms 3. adam 4.sgd_no_decay
 target_optimizer = 'adam'  # 2.rms 3. adam 4.sgd_no_decay
-use_wloss = False
+lr = 0.0002
+use_wloss = True
 if use_wloss:
     discriminator_activations[-1] = 'linear'
     use_clip_weights = True
@@ -202,6 +209,8 @@ para_line.append('use_shared_s_t:' + str(use_shared_s_t) + '\n')
 para_line.append('soft_noise:' + str(soft_noise) + '\n')
 para_line.append('regressor_net:' + str(regressor_net) + '\n')
 para_line.append('discriminator_net:' + str(discriminator_net) + '\n')
+para_line.append('lr:' + str(lr) + '\n')
+
 # regressor
 para_line.append('\n# regressor Parameters \n')
 para_line.append('regressor_units:' + str(regressor_units) + '\n')
@@ -270,9 +279,9 @@ for emotion in emotions:
         KTF.set_session(get_session())
 
     # sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
-    sgd_no_decay = SGD(lr=0.001, decay=0, momentum=0.9, nesterov=True)
-    adam = Adam(lr=0.0002, beta_1=0.5)
-    rms = RMSprop(lr=0.001)
+    sgd_no_decay = SGD(lr=lr, decay=0, momentum=0.9, nesterov=True)
+    adam = Adam(lr=lr, beta_1=0.5)
+    rms = RMSprop(lr=lr)
     # regressor
     if regressor_optimizer == 'rms':
         reg_opt = rms

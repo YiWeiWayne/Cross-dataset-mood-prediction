@@ -117,11 +117,11 @@ else:
         save_path + '/(' + actions[2] + ')' + algorithm[0] + '_20180619.0819.30']
     pretrain_path[algorithm[1]] = [
         save_path + '/(' + actions[0] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-        + target_dataset_name + '_20180619.1010.08',
+        + target_dataset_name + '_20180623.1045.07',
         save_path + '/(' + actions[1] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-        + target_dataset_name + '_20180619.1010.39',
+        + target_dataset_name + '_20180623.1150.00',
         save_path + '/(' + actions[2] + ')' + algorithm[1] + '_S_' + source_dataset_name + '_T_'
-        + target_dataset_name + '_20180619.1012.09']
+        + target_dataset_name + '_20180623.1153.14']
 
 
 
@@ -171,13 +171,13 @@ for j in range(0, 3):  # feature
                     print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
                     data = json.load(fb)
                     if save_key == 'pearsonr':
-                        max_temp = np.square(max(data[data_type+'_pearsonr']))
+                        max_temp = np.square(max(data[data_type+'_pearsonr'][1:]))
                     else:
-                        max_temp = max(data[data_type+'_R2_pearsonr'])
+                        max_temp = max(data[data_type+'_R2_pearsonr'][1:])
             for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):
                 for f in files:
                     if os.path.splitext(f)[1] == '.h5' and data_type+'_R2pr_' + format(max_temp, '.5f') in f:
-                        print('Source ' + actions[j])
+                        print(save_type + actions[j])
                         print(f)
                         model = load_model(os.path.join(root, f), custom_objects={'Std2DLayer': Std2DLayer})
                         Y_predict[emotion][j] = model.predict([Train_X[features[j]]], batch_size=4)
@@ -227,11 +227,11 @@ for feature_index in [[0, 1], [1, 2], [0, 2], [0, 1, 2]]:  # fusion feature
                         print(pretrain_path[algorithm[i]][j] + '/' + emotion + '/log_0_logs.json')
                         data = json.load(fb)
                         if save_key == 'pearsonr':
-                            max_temp = np.square(max(data[data_type+'_pearsonr']))
-                            sign = np.sign(data[data_type+'_pearsonr'][np.argmax(data[data_type+'_pearsonr'])])
+                            max_temp = np.square(max(data[data_type+'_pearsonr'][1:]))
+                            sign = np.sign(data[data_type+'_pearsonr'][np.argmax(data[data_type+'_pearsonr'][1:])])
                         else:
-                            max_temp = max(data[data_type+'_R2_pearsonr'])
-                            sign = np.sign(data[data_type+'pearsonr'][np.argmax(data[data_type+'_R2_pearsonr'])])
+                            max_temp = max(data[data_type+'_R2_pearsonr'][1:])
+                            sign = np.sign(data[data_type+'pearsonr'][np.argmax(data[data_type+'_R2_pearsonr'][1:])])
                         print('max_temp:'+str(max_temp))
                         print('sign:' + str(sign))
                 for root, subdirs, files in os.walk(pretrain_path[algorithm[i]][j] + '/' + emotion):

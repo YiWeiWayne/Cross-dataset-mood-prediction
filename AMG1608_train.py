@@ -18,7 +18,7 @@ def get_session(gpu_fraction=0.3):
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True))
 KTF.set_session(get_session())
 
-action = 'rCTA'
+action = 'melSpec_lw'
 action_description = 'Change regressor to cnn \n' \
                      'and save model pearsonr \n' \
                      'train DCGAN'
@@ -26,7 +26,7 @@ feature = action  # 1.melSpec 2.rCTA 3.melSpec_lw 4.pitch+lw
 source_dataset_name = 'AMG_1608'
 target_dataset_name = 'CH_818'
 save_path = '/mnt/data/Wayne'
-emotions = ['arousal', 'valence']
+emotions = ['valence']
 source_dataset_path = save_path + '/Dataset/AMG1838_original/amg1838_mp3_original'
 source_label_path = save_path + '/Dataset/AMG1838_original/AMG1608/amg1608_v2.xls'
 target_dataset_path = save_path + '/Dataset/CH818/mp3'
@@ -45,11 +45,13 @@ save_weights_only = False
 monitor = 'train_pearsonr'
 mode = 'max'
 load_pretrained_weights = False
-regressor_net = 'cnn_bn'
-use_pooling = False
+regressor_net = 'cnn'
+use_pooling = True
 use_drop_out = False
+regressor_bn = True
 poolings = []
 dr_rate = []
+
 # regressor parameters
 if regressor_net == 'nn':
     regressor_units = [128, 64, 1]
@@ -57,33 +59,33 @@ if regressor_net == 'nn':
 elif regressor_net == 'cnn':
     regressor_units = [64, 128, 256, 1]
     regressor_activations = ['elu', 'elu', 'elu', 'tanh']
-    regressor_kernels = [8, 4, 2]
-    regressor_strides = [4, 2, 1]
-    regressor_paddings = ['valid', 'valid', 'valid']
-elif regressor_net == 'cnn_bn':
-    regressor_units = [32, 64, 128, 1]
-    regressor_activations = ['elu', 'elu', 'elu', 'tanh']
     regressor_kernels = [8, 4, 4]
     regressor_strides = [4, 3, 2]
     regressor_paddings = ['valid', 'valid', 'valid']
-    regressor_bn = True
 regressor_optimizer = 'adam'
 regressor_loss = 'mean_squared_error'
+use_mp=False
 if feature == 'melSpec_lw':  # dim(96, 1249, 1)
-    filters = [128, 128, 128, 128, 128, 128]
-    kernels = [(96, 4), (1, 4), (1, 3), (1, 3), (1, 3), (1, 11)]
-    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2), (1, 1)]
-    paddings = ['valid', 'valid', 'valid', 'valid', 'valid', 'valid']
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(96, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 elif feature == 'rCTA':  # dim(30, 142, 1)
-    filters = [128, 128, 128, 128]
-    kernels = [(30, 4), (1, 3), (1, 3), (1, 11)]
-    strides = [(1, 3), (1, 2), (1, 2), (1, 1)]
-    paddings = ['valid', 'valid', 'valid', 'valid']
+    filters = [128, 128, 128]
+    kernels = [(30, 4), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 2)]
+    paddings = ['valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0]
 elif feature == 'pitch+lw':  # dim(360, 1249, 1)
-    filters = [128, 128, 128, 128, 128, 128]
-    kernels = [(360, 4), (1, 4), (1, 3), (1, 3), (1, 3), (1, 11)]
-    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2), (1, 1)]
-    paddings = ['valid', 'valid', 'valid', 'valid', 'valid', 'valid']
+    filters = [128, 128, 128, 128, 128]
+    kernels = [(360, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+    strides = [(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+    paddings = ['valid', 'valid', 'valid', 'valid', 'valid']
+    poolings = [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+    dr_rate = [0, 0, 0, 0, 0, 0]
 
 para_line = []
 para_line.append('# setting Parameters \n')
@@ -195,22 +197,14 @@ for emotion_axis in emotions:
     extractor = model_structure.compact_cnn_extractor(x=feature_tensor,
                                                       filters=filters, kernels=kernels, poolings=poolings,
                                                       paddings=paddings, dr_rate=dr_rate, strides=strides,
-                                                      use_pooling=use_pooling, use_drop_out=use_drop_out)
+                                                      use_pooling=use_pooling, use_drop_out=use_drop_out, use_mp=use_mp)
     if regressor_net == 'nn':
         regressor = model_structure.nn_classifier(x=extractor,
                                                   units=regressor_units,
                                                   activations=regressor_activations)
     elif regressor_net == 'cnn':
         regressor = model_structure.cnn_classifier(x=extractor,
-                                                   input_channel=3,
-                                                   units=regressor_units,
-                                                   activations=regressor_activations,
-                                                   kernels=regressor_kernels,
-                                                   strides=regressor_strides,
-                                                   paddings=regressor_paddings)
-    elif regressor_net == 'cnn_bn':
-        regressor = model_structure.cnn_classifier(x=extractor,
-                                                   input_channel=1,
+                                                   input_channel=2,
                                                    units=regressor_units,
                                                    activations=regressor_activations,
                                                    kernels=regressor_kernels,
