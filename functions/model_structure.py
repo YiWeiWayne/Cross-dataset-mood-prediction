@@ -31,13 +31,14 @@ def nn_classifier(x, units, activations):
     return x
 
 
-def cnn_classifier(x, input_channel, units, kernels, strides, paddings, activations):
+def cnn_classifier(x, input_channel, units, kernels, strides, paddings, activations, bn=True):
     if len(units) > 1:
         x = Reshape((int(KTF.int_shape(x)[1]/input_channel), input_channel))(x)
         for i in range(0, len(units)-1):
             if activations[i] == 'elu':
                 x = Conv1D(units[i], kernel_size=kernels[i], strides=strides[i], padding=paddings[i])(x)
-                # x = BatchNormalization(axis=-1)(x)
+                if bn:
+                    x = BatchNormalization(axis=-1)(x)
                 x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
             else:
                 x = Conv1D(units[i], activation=activations[i],
@@ -97,7 +98,8 @@ def enforced_regression_classifier(x, input_channel, units, kernels, strides, pa
     return x
 
 
-def compact_cnn_extractor(x, filters, kernels, strides, paddings, poolings, dr_rate):
+def compact_cnn_extractor(x, filters, kernels, strides, paddings, poolings, dr_rate,
+                          use_pooling=False, use_drop_out=False, use_mp=False):
     for i in range(0, len(filters)):
         x = Conv2D(filters=filters[i],
                    kernel_size=kernels[i],
@@ -107,17 +109,24 @@ def compact_cnn_extractor(x, filters, kernels, strides, paddings, poolings, dr_r
                    bias_initializer='glorot_uniform')(x)
         x = BatchNormalization(axis=-1)(x)
         x = keras.layers.advanced_activations.ELU(alpha=1.0)(x)
-        if poolings[i] != (1, 1):
-            x = MaxPooling2D(pool_size=poolings[i])(x)
-        if dr_rate[i] != 0:
-            x = Dropout(rate=dr_rate[i])(x)
-    mp = MaxPooling2D(pool_size=poolings[len(poolings)-1])(x)
-    ap = AveragePooling2D(pool_size=poolings[len(poolings)-1])(x)
-    sp = Std2DLayer(axis=2)(x)
-    x = concatenate([mp, ap, sp])
+        if use_pooling:
+            if poolings[i] != (1, 1):
+                x = MaxPooling2D(pool_size=poolings[i])(x)
+        if use_drop_out:
+            if dr_rate[i] != 0:
+                x = Dropout(rate=dr_rate[i])(x)
+    if use_pooling:
+        ap = AveragePooling2D(pool_size=poolings[len(poolings)-1])(x)
+        sp = Std2DLayer(axis=2)(x)
+        if use_mp:
+            mp = MaxPooling2D(pool_size=poolings[len(poolings)-1])(x)
+            x = concatenate([mp, ap, sp])
+        else:
+            x = concatenate([ap, sp])
     x = Flatten()(x)
-    if dr_rate[len(dr_rate)-1] != 0:
-        x = Dropout(rate=dr_rate[len(dr_rate)-1])(x)
+    if use_drop_out:
+        if dr_rate[len(dr_rate)-1] != 0:
+            x = Dropout(rate=dr_rate[len(dr_rate)-1])(x)
     return x
 
 

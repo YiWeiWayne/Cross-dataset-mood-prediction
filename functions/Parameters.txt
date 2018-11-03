@@ -1,0 +1,60 @@
+# setting Parameters 
+algorithm:NPSRDWADDA
+action:melSpec_lw
+feature:melSpec_lw
+action_description:Change features to melSpec_lw 
+and no pretrained model 
+and train regressor and GAN simultaneously 
+and share discriminator and regressor 
+and balance updating times for discriminator and regressor 
+
+source_dataset_name:AMG_1608
+target_dataset_name:CH_818
+save_path:/mnt/data/Wayne
+execute_name:/mnt/data/Wayne/(melSpec_lw)NPSRDWADDA_S_AMG_1608_T_CH_818_20180606.1245.17
+emotions :['valence', 'arousal']
+sec_length:29
+output_sample_rate:22050
+load_weights_source_feature_extractor:False
+load_weights_source_classifier:False
+load_weights_target_feature_extractor:False
+save_best_only:True
+save_weights_only:False
+
+# network Parameters 
+batch_size:16
+encoded_size:384
+epochs:4000
+k_d:5
+k_g:1
+balance_dis_reg:True
+use_shared_dis_reg:True
+reg_output_activation:tanh
+soft_noise:0
+regressor_net:nn
+discriminator_net:nn
+
+# regressor Parameters 
+regressor_units:[128, 64, 1]
+regressor_activations :['elu', 'elu', 'tanh']
+regressor_loss:mean_squared_error
+regressor_optimizer:adam
+
+# discriminator Parameters 
+discriminator_units:[128, 64, 1]
+discriminator_activations :['elu', 'elu', 'linear']
+use_wloss:True
+use_clip_weights:True
+clip_value:0.01
+discriminator_loss:wloss
+discriminator_optimizer:rms
+target_optimizer:rms
+
+# Feature extractor Parameters 
+filters:[128, 128, 128, 128, 128]
+kernels:[(96, 4), (1, 4), (1, 3), (1, 3), (1, 3)]
+paddings:['valid', 'valid', 'valid', 'valid', 'valid']
+strides:[(1, 3), (1, 2), (1, 3), (1, 3), (1, 2)]
+poolings:[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 11)]
+dr_rate:[0, 0, 0, 0, 0, 0]
+use_regularization:False

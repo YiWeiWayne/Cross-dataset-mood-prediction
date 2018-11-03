@@ -202,13 +202,21 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     source_val_y_pred = source_val_y_pred[:, 0]
     val_y_pred = target_regressor_model.predict(val_x, batch_size=4, verbose=0)
     val_y_pred = val_y_pred[:, 0]
+    target_train_y_pred = target_regressor_model.predict(train_x, batch_size=4, verbose=0)
+    target_train_y_pred = target_train_y_pred[:, 0]
+    train_MSE = mean_squared_error(train_y, train_y_pred)
+    source_val_MSE = mean_squared_error(val_y, source_val_y_pred)
+    val_MSE = mean_squared_error(val_y, val_y_pred)
+    target_train_MSE = mean_squared_error(train_y, target_train_y_pred)
     with np.errstate(divide='ignore'):
         train_R2_pearsonr = np.square(pearsonr(train_y, train_y_pred)[0])
         source_val_R2_pearsonr = np.square(pearsonr(val_y, source_val_y_pred)[0])
         val_R2_pearsonr = np.square(pearsonr(val_y, val_y_pred)[0])
+        target_train_R2_pearsonr = np.square(pearsonr(train_y, target_train_y_pred)[0])
         train_pearsonr = pearsonr(train_y, train_y_pred)[0]
         source_val_pearsonr = pearsonr(val_y, source_val_y_pred)[0]
         val_pearsonr = pearsonr(val_y, val_y_pred)[0]
+        target_train_pearsonr = pearsonr(train_y, target_train_y_pred)[0]
     if math.isnan(source_val_R2_pearsonr):
         source_val_R2_pearsonr = 0
         source_val_pearsonr = 0
@@ -218,17 +226,23 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     if math.isnan(train_R2_pearsonr):
         train_R2_pearsonr = 0
         train_pearsonr = 0
-    log_data["train_MSE"].append(train_loss[0])
-    log_data["reg_MSE"].append(reg_loss[0])
-    log_data["val_MSE"].append(val_loss[0])
+    if math.isnan(target_train_R2_pearsonr):
+        target_train_R2_pearsonr = 0
+        target_train_pearsonr = 0
+    log_data["train_MSE"].append(train_MSE)
+    log_data["source_val_MSE"].append(source_val_MSE)
+    log_data["val_MSE"].append(val_MSE)
+    log_data["target_train_MSE"].append(target_train_MSE)
     log_data["train_loss_fake"].append(loss_fake[0])
     log_data["train_loss_dis"].append(loss_dis[0])
     log_data["train_R2_pearsonr"].append(train_R2_pearsonr)
     log_data["source_val_R2_pearsonr"].append(source_val_R2_pearsonr)
     log_data["val_R2_pearsonr"].append(val_R2_pearsonr)
+    log_data["target_train_R2_pearsonr"].append(target_train_R2_pearsonr)
     log_data["train_pearsonr"].append(train_pearsonr)
     log_data["source_val_pearsonr"].append(source_val_pearsonr)
     log_data["val_pearsonr"].append(val_pearsonr)
+    log_data["target_train_pearsonr"].append(target_train_pearsonr)
     with open(file_name + "_logs.json", "w") as fb:
         json.dump(log_data, fb)
     print("train_MSE: ", train_loss)
@@ -242,15 +256,18 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     print("source_val_R2_pearsonr: ", source_val_R2_pearsonr)
     print("val_pearsonr: ", val_pearsonr)
     print("val_R2_pearsonr: ", val_R2_pearsonr)
+    print("target_train_pearsonr: ", target_train_pearsonr)
+    print("target_train_R2_pearsonr: ", target_train_R2_pearsonr)
 
     # summarize history for MSE
     plt.plot(log_data['train_MSE'])
-    plt.plot(log_data['reg_MSE'])
+    plt.plot(log_data['source_val_MSE'])
     plt.plot(log_data['val_MSE'])
+    plt.plot(log_data['target_train_MSE'])
     plt.title('model MSE')
     plt.ylabel('MSE')
     plt.xlabel('epoch')
-    plt.legend(['train', 'reg', 'val'], loc='upper left')
+    plt.legend(['train', 'source_val', 'val', 'target_train'], loc='upper left')
     plt.savefig(file_name + "_MSE.png")
     plt.close()
 
@@ -268,10 +285,11 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     plt.plot(log_data['train_R2_pearsonr'])
     plt.plot(log_data['source_val_R2_pearsonr'])
     plt.plot(log_data['val_R2_pearsonr'])
+    plt.plot(log_data['target_train_R2_pearsonr'])
     plt.title('model pearson R square')
     plt.ylabel('R2_pearsonr')
     plt.xlabel('epoch')
-    plt.legend(['train', 'source_val', 'val'], loc='upper left')
+    plt.legend(['train', 'source_val', 'val', 'target_train'], loc='upper left')
     plt.savefig(file_name + "_R2_pearsonr.png")
     plt.close()
 
@@ -279,10 +297,11 @@ def log_dump_all(model_path, run_num, source_regressor_model, train_x, train_y,
     plt.plot(log_data['train_pearsonr'])
     plt.plot(log_data['source_val_pearsonr'])
     plt.plot(log_data['val_pearsonr'])
+    plt.plot(log_data['target_train_pearsonr'])
     plt.title('model pearson')
     plt.ylabel('pearsonr')
     plt.xlabel('epoch')
-    plt.legend(['train', 'source_val', 'val'], loc='upper left')
+    plt.legend(['train', 'source_val', 'val', 'target_train'], loc='upper left')
     plt.savefig(file_name + "_pearsonr.png")
     plt.close()
 
