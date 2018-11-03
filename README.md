@@ -1,5 +1,5 @@
 # Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation
-## To be published in **ICMLA 2018**
+(To be published in **ICMLA 2018**)
 
 ## Effectiveness of adaptation:
 ### 1. Valence prediction: Our adaptation improves the performance for all features 
