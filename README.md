@@ -1,7 +1,8 @@
 # Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation
 ## To be published in **ICMLA 2018**
 
-## The result shows that the adaptation improves the performance of valence prediction for all features and enables our model to achieve the best performance of arousal prediction for the timbre feature.
+### Our adaptation improves the performance of valence prediction for all features 
+### and enables our model to achieve the best performance of arousal prediction for the timbre feature.
 #### Table 2. Comparison of the R2 performance of our model with or without adaptation evaluated in the cross-dataset experiment (tested on CH818)
 |         | Adaptation | Timbre | Pitch | Rhythm | Timbre + Pitch | Timbre + Rhythm | Rhythm + Pitch | Timbre + Pitch + Rhythm |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
