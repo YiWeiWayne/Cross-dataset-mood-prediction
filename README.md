@@ -1,8 +1,8 @@
-# Cross-dataset-mood-prediction
+# Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation
+# To be published in ICMLA 2018
 
 ## 20180329 - Regressor result
-#### Show in R square(Square of Pearson correlation coefficients)
-#### Valence:
+#### Table 2. Comparison of the R2 performance of our model with or without adaptation evaluated in the cross-dataset experiment (tested on CH818)
 | Train | Test | SVM(paper's) | Compact_CNN |
 | :---: | :---: | :---: | :---: |
 | AMG | AMG | 0.14 | **0.27** |
