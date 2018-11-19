@@ -1,4 +1,5 @@
 # Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation
+The Kears implementation of "Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation".
 (To be published in **ICMLA 2018**)
 
 ## Effectiveness of adaptation:
@@ -11,3 +12,13 @@
 |         | V | **0.21** | 0.18 | 0.06 | 0.22 | 0.22 | 0.17 | **0.23** |
 | Arousal | - | 0.72 | 0.69 | 0.39 | 0.74 | 0.68 | 0.67 | 0.74 | 
 |         | V | **0.73** | 0.65 | 0.28 | **0.76** | 0.65 | 0.49 | 0.71 |
+
+## References
+@inproceedings{choi2017kapre,
+  title={Kapre: On-GPU Audio Preprocessing Layers for a Quick Implementation of Deep Neural Network Models with Keras},
+  author={Choi, Keunwoo and Joo, Deokjin and Kim, Juho},
+  booktitle={Machine Learning for Music Discovery Workshop at 34th International Conference on Machine Learning},
+  year={2017},
+  organization={ICML}
+}
+@inproceedings{Bittner:DeepSalience:ISMIR:17, Address = {Suzhou, China}, Author = {Bittner, R.M. and McFee, B. and Salamon, J. and Li, P. and Bello, J.P.}, Booktitle = {18th Int.~Soc.~for Music Info.~Retrieval Conf.}, Month = {Oct.}, Title = {Deep Salience Representations for $F_0$ Estimation in Polyphonic Music}, Year = {2017}}
