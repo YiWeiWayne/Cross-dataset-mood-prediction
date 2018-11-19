@@ -5,9 +5,8 @@ The Kears implementation of "Cross-Cultural Music Emotion Recognition by Adversa
 ``` Citation: Yi-Wei Chen, Yi-Hsuan Yang, and Homer H. Chen, "Cross-cultural music emotion recognition by adversarial discriminative domain adaptation," Proc. IEEE Int. Conf. Machine Learning and Applications (ICMLA), December 2018. ```
 
 ## Effectiveness of adaptation:
-1. Valence prediction: Our adaptation improves the performance for all features 
-2. Arousal prediction: Our adaptation improves the performance for the timbre feature
-#### Table 2. Comparison of the R2 performance of our model with or without adaptation evaluated in the cross-dataset experiment (tested on CH818)
+* Valence prediction: Our adaptation improves the performance for all features 
+* Arousal prediction: Our adaptation improves the performance for the timbre feature
 |         | Adaptation | Timbre | Pitch | Rhythm | Timbre + Pitch | Timbre + Rhythm | Rhythm + Pitch | Timbre + Pitch + Rhythm |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | Valence | - | 0.03 | 0.08 | 0.04 | 0.08 | 0.05 | 0.08 | 0.09 |
@@ -17,10 +16,10 @@ The Kears implementation of "Cross-Cultural Music Emotion Recognition by Adversa
 
 ## How to use
 ### 0. Reformat the audio files
-* Tansfer audio files into 22.05KHz and clip into 29 seconds
-#### Call function: Transfer_funcs.audio_to_wav()
-* Generate combined audio files and labels for training
-#### Call function: Transfer_funcs.wav_to_npy()
+> Tansfer audio files into 22.05KHz and clip into 29 seconds
+>> Call function: Transfer_funcs.audio_to_wav()
+> Generate combined audio files and labels for training
+>> Call function: Transfer_funcs.wav_to_npy()
 
 ### 1. Extract features
 * Extract log-mel spectrogram [1]
