@@ -48,7 +48,7 @@ Use Multi_fusion_pred_S_AMG1608_T_CH818_find_by_loss.py
 |         | V | **0.73** | 0.65 | 0.28 | **0.76** | 0.65 | 0.49 | 0.71 |
 
 ## References
-[1] K. Choi, D. Joo, and J. Kim, "Kapre: On-gpu audio preprocessing layers for a quick implementation of deep neural network models with keras," arXiv preprint arXiv:1706.05781, 2017.
-[2]	R. M. Bittner et al., “Deep salience representations for f0 estimation in polyphonic music,” in Proc. Int. Soc. Music Information Retrieval, pp. 23–27, 2017.
-[3]	P. Grosche, M. Muller, and F. Kurth, “Cyclic tempogram—a midlevel tempo representation for music signals,” in IEEE Trans. Acoustics Speech Signal Process., pp. 5522–5525, 2010.
+*[1] K. Choi, D. Joo, and J. Kim, "Kapre: On-gpu audio preprocessing layers for a quick implementation of deep neural network models with keras," arXiv preprint arXiv:1706.05781, 2017.
+*[2]	R. M. Bittner et al., “Deep salience representations for f0 estimation in polyphonic music,” in Proc. Int. Soc. Music Information Retrieval, pp. 23–27, 2017.
+*[3]	P. Grosche, M. Muller, and F. Kurth, “Cyclic tempogram—a midlevel tempo representation for music signals,” in IEEE Trans. Acoustics Speech Signal Process., pp. 5522–5525, 2010.
 
