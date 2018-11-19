@@ -2,7 +2,7 @@
 
 The Kears implementation of "Cross-Cultural Music Emotion Recognition by Adversarial Discriminative Domain Adaptation".
 
-'''Yi-Wei Chen, Yi-Hsuan Yang, and Homer H. Chen, "Cross-cultural music emotion recognition by adversarial discriminative domain adaptation," Proc. IEEE Int. Conf. Machine Learning and Applications (ICMLA), December 2018.
+''' Yi-Wei Chen, Yi-Hsuan Yang, and Homer H. Chen, "Cross-cultural music emotion recognition by adversarial discriminative domain adaptation," Proc. IEEE Int. Conf. Machine Learning and Applications (ICMLA), December 2018.
 
 ## Effectiveness of adaptation:
 ### 1. Valence prediction: Our adaptation improves the performance for all features 
